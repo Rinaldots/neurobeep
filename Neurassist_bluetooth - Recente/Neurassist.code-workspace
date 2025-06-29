@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../Neurassist"
+		},
+		{
+			"name": "Encoder",
+			"path": "../Encoder"
+		},
+		{
+			"name": "Neurassist_New",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
