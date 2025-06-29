@@ -16,10 +16,6 @@ class MOTOR {
     int PIN_A, PIN_B;
     bool inverted; // Inverte a direção do motor CASO seja necessário
 
-    // PID Parameters
-    float kp, ki, kd;
-    float minPwm; // Valor PWM para iniciar o motor
-
     // PID Variaveis para calculo de PID
     float integral;
     float previousError;
@@ -30,15 +26,14 @@ class MOTOR {
     volatile unsigned long encoder_interrupt_time = 0;
 
     // Variaveis para o controle do motor
-    double targetRpm = 0;    
-    double currentRpm = 0;   
+    double currentRpm = 0;    
+    double targetRpm = 0;   
     double pwmOutput = 0;    
 
-    MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted, float p_gain, float i_gain, float d_gain, float min_pwm_val);
+    MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted);
     void pwm(int PWM, bool Direction);
     void stop_motor();
     void calculateCurrentRpm();
-    void calculatePid();
 }; 
 
 extern MOTOR leftWheel;

@@ -23,7 +23,9 @@
 
 
 // Definições de pinos PID padrao dos motores
-const float DEFAULT_KP = 2.0f, DEFAULT_KI = 0.4f, DEFAULT_KD = 0.002f, DEFAULT_MIN_PWM = 800.0f;
+const float DEFAULT_KP = 1.0f, DEFAULT_KI = 0.05f, DEFAULT_KD = 0.25f, DEFAULT_MIN_PWM = 800.0f;
+const float AGG_KP = 4.0f, AGG_KI = 0.2f, AGG_KD = 1.0f;
+
 // Frequência e resolução do PWM
 const int freq = 5000 , resolution = 10;
 // Pulsos por revolução do encoder

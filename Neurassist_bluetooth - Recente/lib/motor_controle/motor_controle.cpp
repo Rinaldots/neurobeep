@@ -1,6 +1,7 @@
 
 #include "motor_controle.h"
 #include "odometry.h"
+#include "config.h"
 // PID parameters
 
 // Definição das variáveis globais
@@ -8,10 +9,10 @@ unsigned long motor_last_time = 0, motor_actual_time = 0;
 float delta_distance = 0.0f; // Variável para armazenar a distância percorrida
 MOTOR rightWheel(B_IA, B_IB, false, DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, DEFAULT_MIN_PWM);
 MOTOR leftWheel(A_IB, A_IA, false, DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, DEFAULT_MIN_PWM);
-PID leftWheel_PID(&leftWheel.currentRpm, &leftWheel.targetRpm, &leftWheel.pwmOutput, 
-                  DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, P_ON_M, DIRECT);
-PID rightWheel_PID(&rightWheel.currentRpm, &rightWheel.targetRpm, &rightWheel.pwmOutput, 
-                   DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, P_ON_M, DIRECT);
+PID leftWheel_PID(&leftWheel.currentRpm, &leftWheel.pwmOutput, &leftWheel.targetRpm, 
+                  DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, DIRECT);
+PID rightWheel_PID(&rightWheel.currentRpm, &rightWheel.pwmOutput, &rightWheel.targetRpm, 
+                   DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, DIRECT);
 void IRAM_ATTR a_encoder() {
   unsigned long current_time = millis();
   if (current_time - leftWheel.encoder_interrupt_time > debounce_delay) {
@@ -27,7 +28,7 @@ void IRAM_ATTR b_encoder() {
   }
 }
 
-MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted, float p_gain, float i_gain, float d_gain, float min_pwm_val) {
+MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted) {
   this->PIN_A = motor_pin_a;
   this->PIN_B = motor_pin_b;
   this->inverted = is_inverted;
@@ -37,15 +38,8 @@ MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted, float p_gain, f
   this->current_time = 0;
   this->previous_time = 0;
 
-  this->kp = p_gain;
-  this->ki = i_gain;
-  this->kd = d_gain;
-  this->minPwm = min_pwm_val;
-
-  this->integral = 0.0f;
-  this->previousError = 0.0f;
-  this->targetRpm = 0.0;
   this->currentRpm = 0.0;
+  this->targetRpm = 0.0;
   this->pwmOutput = 0.0;
 
   ledcAttach(this->PIN_A, freq, resolution);
@@ -101,37 +95,6 @@ void MOTOR::calculateCurrentRpm() {
   
 }
 
-void MOTOR::calculatePid() {
-    // Se a velocidade alvo é zero, zera o PWM e os termos PID.
-    // Isso é importante para evitar que o motor continue girando quando não deveria.
-    if (this->targetRpm == 0) {
-        this->pwmOutput = 0;
-        this->integral = 0.0f;
-        this->previousError = 0.0f;
-        return;
-    }
-
-    float error = this->targetRpm - this->currentRpm;
-
-    this->integral += error;
-    // Previne o termo integral de crescer demais
-    if (this->ki != 0) {
-        float max_integral_contribution = 1023.0f * 0.4f; // e.g., a integral nao deve contribuir mais que 40% do PWM maximo
-        float max_abs_integral = fabsf(this->ki) > 1e-6 ? (max_integral_contribution / fabsf(this->ki)) : 0.0f;
-        if (this->integral > max_abs_integral) this->integral = max_abs_integral;
-        else if (this->integral < -max_abs_integral) this->integral = -max_abs_integral;
-    }
-
-    float derivative = error - this->previousError;
-    this->previousError = error; // Atualiza o erro anterior
-    float pid_calculated_value = (this->kp * error) + (this->ki * this->integral) + (this->kd * derivative);
-
-    this->pwmOutput = this->minPwm + pid_calculated_value;
-
-    // Previne o PWM de exceder os limites
-    if (this->pwmOutput > 1023.0f) this->pwmOutput = 1023.0f;
-    else if (this->pwmOutput < 0) this->pwmOutput = 0;
-}
 
 // Inicializa os motores e configura os pinos de interrupção para os encoders
 void setupMotors() {
@@ -153,16 +116,47 @@ void motorHandler(int drive_mode) {
  // drive_mode = 0; // Força o modo de controle por RPM
  // drive_mode = 1; // Força o modo de controle por deslocamento
  motor_actual_time = millis();
-  switch (drive_mode)
+switch (drive_mode)
   {
   case 0:
+    
     
   if (motor_actual_time - motor_last_time > 500) {
     leftWheel.calculateCurrentRpm();
     rightWheel.calculateCurrentRpm();
+    float left_gap = abs(leftWheel.currentRpm - leftWheel.targetRpm);
+    float right_gap = abs(rightWheel.currentRpm - rightWheel.targetRpm);
+    
+    if (left_gap > 3){
+      Serial.println("Left gap: " + String(left_gap));
+      if (left_gap < 20)
+        {  //we're close to setpoint, use conservative tuning parameters
+          leftWheel_PID.SetTunings(DEFAULT_KP, DEFAULT_KI, DEFAULT_KD);
+        }
+      else
+        {
+          //we're far from setpoint, use aggressive tuning parameters
+          leftWheel_PID.SetTunings(AGG_KP, AGG_KI, AGG_KD);
+        }
+        leftWheel_PID.Compute();
+    }
+    if (right_gap > 3 || !leftWheel.currentRpm == 0){
+      Serial.println("Right gap: " + String(right_gap));
+      if (right_gap < 20)
+        {  //we're close to setpoint, use conservative tuning parameters
+          rightWheel.pwm(static_cast<int>(rightWheel.minPwm), true);
+          rightWheel_PID.SetTunings(DEFAULT_KP, DEFAULT_KI, DEFAULT_KD);
+        }
+      else
+        {
+          //we're far from setpoint, use aggressive tuning parameters
+          rightWheel_PID.SetTunings(AGG_KP, AGG_KI, AGG_KD);
+        }
+      
+        rightWheel_PID.Compute();
+    }
 
-    leftWheel_PID.Compute();
-    rightWheel_PID.Compute();
+    
 
     leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput), true);
     rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput), true);
