@@ -12,33 +12,16 @@ void setup() {
   setupMotors(); // Configura os motores
   setupSensors(); // Configura os sensores
 }
-int estado = 0;
+int estado = 2;
+int temp_estado = 0;
 void loop() {
 
-  estado = callbackBluetooth();
+  temp_estado = callbackBluetooth();
+
+  if (temp_estado != 9) {
+    estado = temp_estado; // Atualiza o estado se houver uma mudança
+  }
   
   motorHandler(estado);
+  readSensors();
 }
-/*
-int estadoSensorEsquerdo = digitalRead(SENSOR_LINE_LEFT);
-  int estadoSensorDireito = digitalRead(SENSOR_LINE_RIGHT);
-
-  if (true){
-    // Lógica de seguidor de linha com controle dos pinos de direção
-    if (estadoSensorEsquerdo == LOW && estadoSensorDireito == LOW) {
-      
-    } else if (estadoSensorEsquerdo == HIGH && estadoSensorDireito == LOW) {
-      
-  
-      Serial.println("Virando para a direita");
-    } else if (estadoSensorEsquerdo == LOW && estadoSensorDireito == HIGH) {
-      
-  
-      Serial.println("Seguindo em frente");
-    } else {
-  
-      Serial.println("Seguindo em frente");
-    }
-
-
-*/

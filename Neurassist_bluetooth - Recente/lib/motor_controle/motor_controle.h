@@ -7,7 +7,7 @@
 
 
 // Variáveis de debounce
-const int debounce_delay = 50; // 50 ms de debounce
+const int debounce_delay = 10; // 10 ms de debounce
 extern unsigned long motor_last_time, motor_actual_time;
 extern float delta_distance; // Variável para armazenar a distância percorrida
 class MOTOR {
@@ -16,11 +16,7 @@ class MOTOR {
     int PIN_A, PIN_B;
     bool inverted; // Inverte a direção do motor CASO seja necessário
 
-    // PID Variaveis para calculo de PID
-    float integral;
-    float previousError;
-
-    // Variaveis para o encoder
+    //ariaveis para o encoder
     volatile long current_position = 0, previous_position = 0;
     unsigned long current_time = 0, previous_time = 0;
     volatile unsigned long encoder_interrupt_time = 0;
@@ -42,5 +38,14 @@ extern MOTOR rightWheel;
 void setupMotors();
 
 void motorHandler(int drive_mode); // drive_mode = 0 for RPM control, drive_mode = 1 for displacement control
+
+// Function to set target RPM for both motors
+void setMotorTargetRpm(float left_rpm, float right_rpm);
+
+// Function to stop both motors
+void stopMotors();
+
+// Function to reset PID controllers
+void resetPIDControllers();
 
 #endif // MOTOR_CONTROLE_H

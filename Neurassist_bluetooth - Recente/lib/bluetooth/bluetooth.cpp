@@ -57,22 +57,25 @@ int callbackBluetooth() {
 
         } else if (recebido == '1') {
             Serial.println("Andando para frente 100");
-            delta_distance = 100;
+            delta_distance = odometry.x_pos_ + 0.15; // Define a distância alvo para 1.5m
+            
             Serial.println("Delta Distance: " + String(delta_distance));
             Serial.println("Posição Odometria: (" + String(odometry.x_pos_) + ", " + String(odometry.y_pos_) + ")");
             return 1;
         } else if (recebido == 'A') {
             Serial.println("Andando para frente");
-            leftWheel.targetRpm = 30; // Reseta a velocidade alvo do motor esquerdo
-            rightWheel.targetRpm = 30; // Reseta a velocidade alvo do motor direito
+            setMotorTargetRpm(40, 40); // Define a velocidade alvo dos motores
             return 0; // Retorna 0 para indicar que o robô está parado
         } else if (recebido == 'D') {
             
         } else if (recebido == 'E') {
             
         } else if (recebido == 'S') {
-            state = "steady";
+            Serial.println("Modo Seguir Linha Ativado");
+            leftWheel.targetRpm = 45; // Reseta a velocidade alvo do motor esquerdo
+            rightWheel.targetRpm = 45; // Reseta a velocidade alvo do motor direito
+            return 2; // Retorna 2 para indicar que o modo seguir linha está ativ
         }
     }
-    return 0; // Retorna 0 se nenhum comando for recebido
+    return 9; // Retorna 0 se nenhum comando for recebido
 }
