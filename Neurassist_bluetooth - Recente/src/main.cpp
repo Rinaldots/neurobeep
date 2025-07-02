@@ -12,16 +12,21 @@ void setup() {
   setupMotors(); // Configura os motores
   setupSensors(); // Configura os sensores
 }
-int estado = 2;
+int estado = 3;
 int temp_estado = 0;
+int temp_estado_motor = 1;
 void loop() {
 
   temp_estado = callbackBluetooth();
-
+  
   if (temp_estado != 9) {
     estado = temp_estado; // Atualiza o estado se houver uma mudança
   }
   
-  motorHandler(estado);
-  readSensors();
+  int temp_estado_motor = motorHandler(estado);
+  if (temp_estado_motor != -1) {
+    estado = temp_estado_motor;
+  }
+
+  //readSensors();
 }

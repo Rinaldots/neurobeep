@@ -23,16 +23,17 @@
 
 
 // Definições de pinos PID padrao dos motores
-const float DEFAULT_KP = 0.3f, DEFAULT_KI = 0.005f, DEFAULT_KD = 0.05f;
-const float AGG_KP = 0.5f, AGG_KI = 0.01f, AGG_KD = 0.1f;
+const float DEFAULT_KP = 2.0f, DEFAULT_KI = 0.5f, DEFAULT_KD = 0.1f;
+
+const int motor_startup = 700;
 
 // Frequência e resolução do PWM
 const int freq = 5000 , resolution = 10;
 // Pulsos por revolução do encoder (verificar com seu encoder específico)
-const float ENCODER_PULSES_PER_REVOLUTION = 26.0f;
+const float ENCODER_PULSES_PER_REVOLUTION = 20.0f;
 // Distância entre os eixos das rodas (em metros)
 const float wheels_y_distance_ = 0.16f; // Distância entre as rodas (em metros)
 // Circunferência da roda (em metros)
 const float wheel_circumference_ = 0.065f * 3.141;
-
+const int time_update = 150;
 #endif // CONFIG_H

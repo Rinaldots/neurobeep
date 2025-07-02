@@ -13,7 +13,7 @@ extern float delta_distance; // Variável para armazenar a distância percorrida
 class MOTOR {
   public:
     // Pinos do motor
-    int PIN_A, PIN_B;
+    int PIN_A, PIN_PWM_CHANNEL;
     bool inverted; // Inverte a direção do motor CASO seja necessário
 
     //ariaveis para o encoder
@@ -27,7 +27,7 @@ class MOTOR {
     double pwmOutput = 0;    
 
     MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted);
-    void pwm(int PWM, bool Direction);
+    void pwm(int PWM);
     void stop_motor();
     void calculateCurrentRpm();
 }; 
@@ -37,14 +37,13 @@ extern MOTOR rightWheel;
 
 void setupMotors();
 
-void motorHandler(int drive_mode); // drive_mode = 0 for RPM control, drive_mode = 1 for displacement control
-
 // Function to set target RPM for both motors
 void setMotorTargetRpm(float left_rpm, float right_rpm);
 
 // Function to stop both motors
 void stopMotors();
 
+void motorSpeed();
 // Function to reset PID controllers
 void resetPIDControllers();
 

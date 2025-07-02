@@ -6,30 +6,41 @@ bool CONT_SENSOR_LINE_LEFT = false;
 bool CONT_SENSOR_LINE_RIGHT = false;
 bool CONT_SENSOR_LINE_CENTER = false;
 
+// Timer para leitura periódica dos sensores analógicos
+hw_timer_t * sensorTimer = NULL;
+
+// Função de interrupção por timer para leitura analógica
+void IRAM_ATTR onSensorTimer() {
+    // Lê valores analógicos e atualiza variáveis
+    int leftValue = analogRead(SENSOR_LINE_LEFT);
+    int rightValue = analogRead(SENSOR_LINE_RIGHT);
+    int centerValue = analogRead(SENSOR_LINE_CENTER);
+    
+    // Considera linha detectada se valor > 4090
+    CONT_SENSOR_LINE_LEFT = (leftValue > 4090);
+    CONT_SENSOR_LINE_RIGHT = (rightValue > 4090);
+    CONT_SENSOR_LINE_CENTER = (centerValue > 4090);
+}
+
 void setupSensors() {
+    // Configura os pinos como entrada analógica (não precisa de pull-up)
     pinMode(SENSOR_LINE_LEFT, INPUT);
     pinMode(SENSOR_LINE_RIGHT, INPUT);
     pinMode(SENSOR_LINE_CENTER, INPUT);
-    Serial.println("Sensors initialized.");
-}
-void readSensors() {
-    int TEMP_SENSOR_LINE_LEFT = analogRead(SENSOR_LINE_LEFT);
-    int TEMP_SENSOR_LINE_RIGHT = analogRead(SENSOR_LINE_RIGHT);
-    int TEMP_SENSOR_LINE_CENTER = analogRead(SENSOR_LINE_CENTER);
-    if (TEMP_SENSOR_LINE_CENTER> 4090){
-        CONT_SENSOR_LINE_CENTER = true;
-    } else {
-        CONT_SENSOR_LINE_CENTER = false;
-    }
-    if (TEMP_SENSOR_LINE_LEFT > 4090) {
-        CONT_SENSOR_LINE_LEFT = true;
-    } else {
-        CONT_SENSOR_LINE_LEFT = false;
-    }
-    if (TEMP_SENSOR_LINE_RIGHT > 4090) {
-        CONT_SENSOR_LINE_RIGHT = true;
-    } else {
-        CONT_SENSOR_LINE_RIGHT = false;
-    }
     
-    }
+    // Configura timer para ler sensores a cada 10ms (100Hz)
+    sensorTimer = timerBegin(1000000); // 1MHz frequency
+    timerAttachInterrupt(sensorTimer, &onSensorTimer); // Anexa interrupção
+    timerAlarm(sensorTimer, 10000, true, 0); // 10ms = 10000 microsegundos, repetir
+    
+    Serial.println("Sensors initialized with timer-based analog reading (100Hz).");
+}
+
+void readSensors() {
+    Serial.print("Line Sensors - Left: ");
+    Serial.print(CONT_SENSOR_LINE_LEFT);
+    Serial.print(" | Center: ");
+    Serial.print(CONT_SENSOR_LINE_CENTER);
+    Serial.print(" | Right: ");
+    Serial.println(CONT_SENSOR_LINE_RIGHT);
+}
