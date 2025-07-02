@@ -51,6 +51,11 @@ MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted) {
 
 
 void MOTOR::pwm(int PWM) {
+  if ( PWM >= 1023) {
+    PWM = 1023; // Limita o PWM a 1023
+  } else if (PWM < 0) {
+    PWM = 0; // Limita o PWM a -1023
+  }
   if (PWM > 0) {
     ledcWrite(PIN_PWM_CHANNEL, PWM);
     ledcWrite(PIN_A, 1023);
@@ -75,7 +80,16 @@ void MOTOR::calculateCurrentRpm() {
   
   if (delta_position > 0) {
       float calculated_rpm = (static_cast<float>(delta_position) * 60000.0f) / (ENCODER_PULSES_PER_REVOLUTION * delta_time_ms);
-      this->currentRpm = calculated_rpm;
+      
+      float ramp_rate = 10.0f; 
+      if (calculated_rpm > this->currentRpm) {
+          this->currentRpm += ramp_rate;
+          if (this->currentRpm > calculated_rpm) {
+          this->currentRpm = calculated_rpm;
+          }
+      } else {
+          this->currentRpm = calculated_rpm;
+      }
   } else {
       // Se não houve movimento, decai gradualmente a velocidade
       this->currentRpm *= 0.2f; 
@@ -99,8 +113,8 @@ void setupMotors() {
   rightWheel_PID.SetMode(AUTOMATIC);
   leftWheel_PID.SetSampleTime(200); // Tempo de amostragem em milissegundos (aumentado para mais estabilidade)
   rightWheel_PID.SetSampleTime(200); // Tempo de amostragem em milissegundos
-  leftWheel_PID.SetOutputLimits(-motor_startup,(1023-motor_startup));  // Limites menos extremos
-  rightWheel_PID.SetOutputLimits(-motor_startup, (1023-motor_startup)); // Evita PWM muito baixo ou muito alto
+  leftWheel_PID.SetOutputLimits(-motor_startup,(900-motor_startup));  // Limites menos extremos
+  rightWheel_PID.SetOutputLimits(-motor_startup, (900-motor_startup)); // Evita PWM muito baixo ou muito alto
 }
 
 void stopMotors() {

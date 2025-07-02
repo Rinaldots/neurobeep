@@ -19,7 +19,7 @@ BluetoothSerial SerialBT;
 
 
 const char *pin = "0000";
-String device_name = "esp32";
+String device_name = "neuro_esp32";
 String state = "steady";
 float actual_detection = 0;
 float last_detection = 0;
@@ -39,7 +39,6 @@ void setupBluetooth() {
   Serial.println("Bluetooth iniciado! Dispositivo disponível para pareamento.");
   Serial.println("Procure pelo dispositivo '" + device_name + "' na lista de dispositivos Bluetooth.");
 }
-
 
 
 
@@ -68,12 +67,9 @@ int callbackBluetooth() {
             return 0; // Retorna 0 para indicar que o robô está parado
 
         } else if (recebido == '1') {
-            Serial.println("Andando para frente 100");
-            delta_distance = odometry.x_pos_ + 0.15; // Define a distância alvo para 1.5m
+            SerialBT.println("Modo Seguir Linha Ativado");
             
-            Serial.println("Delta Distance: " + String(delta_distance));
-            Serial.println("Posição Odometria: (" + String(odometry.x_pos_) + ", " + String(odometry.y_pos_) + ")");
-            return 1;
+            return 3;
         } else if (recebido == 'A') {
             Serial.println("Andando para frente");
             setMotorTargetRpm(40, 40); // Define a velocidade alvo dos motores
@@ -146,85 +142,86 @@ switch (drive_mode)
   }
   case 3: {
     //Modo seguidor de linha     
+    int speed = 75; // Velocidade padrão para o seguidor de linha
     if (motor_actual_time - motor_last_time > time_update) { 
-      int speed = 70; // Velocidade padrão para o seguidor de linha
       motorSpeed();
-      
-      int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);
-      int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup);
-      
-      if (CONT_SENSOR_LINE_LEFT && CONT_SENSOR_LINE_RIGHT && CONT_SENSOR_LINE_CENTER) {
-        Serial.println("Linha de controle");
-        if(!on_controll_line){
-            last_detection = actual_detection; // Atualiza a última detecção de linha central
-            actual_detection = odometry.x_pos_; // Atualiza a última detecção de linha central
-            Serial.print("Ultima detecção: ");
-            Serial.print(last_detection);
-            Serial.print(" | Detecção atual: ");
-            Serial.print(actual_detection);
-            Serial.print(" | Diferença: ");
-            Serial.println(actual_detection - last_detection);
-        }
-
-        on_controll_line = true;
-        left_detected = false; // Reseta a detecção de linha esquerda
-        right_detected = false; // Reseta a detecção de linha direita
-        
-        if((actual_detection - last_detection < 0.8) && odometry.x_pos_ > 0.8) {
-          Serial.print("Stop detecatado");
-          stopMotors(); // Para os motores
-          leftWheel.pwm(0); // Para o motor esquerdo
-          rightWheel.pwm(0); // Para o motor direito
-          Serial.println("Parando o robô");
-          
-        } else if(actual_detection - last_detection > 1.5) {
-          Serial.println("Entre linhas detectado!");
+      motor_last_time = motor_actual_time;
+      Serial.println("Left Wheel RPM target: " + String(leftWheel.targetRpm));
+      Serial.println("Right Wheel RPM target: " + String(rightWheel.targetRpm));
+      Serial.println("leftWheel.velocity: " + String(leftWheel.currentRpm));
+      Serial.println("rightWheel.velocity: " + String(rightWheel.currentRpm));
+    }
+    int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);    
+    int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup); 
+    if (CONT_SENSOR_LINE_LEFT && CONT_SENSOR_LINE_RIGHT && CONT_SENSOR_LINE_CENTER) {
+      Serial.println("Linha de controle");
+      if(!on_controll_line){
+          last_detection = actual_detection; // Atualiza a última detecção de linha central
+          actual_detection = odometry.x_pos_; // Atualiza a última detecção de linha central
           Serial.print("Ultima detecção: ");
           Serial.print(last_detection);
           Serial.print(" | Detecção atual: ");
           Serial.print(actual_detection);
           Serial.print(" | Diferença: ");
           Serial.println(actual_detection - last_detection);
-        }
-      } else if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
-        //Serial.println("Linha central detectada!");
-        on_controll_line = false;
-        left_detected = false; // Reseta a detecção de linha esquerda
-        right_detected = false; // Reseta a detecção de linha direita
-        // Mantém velocidade normal
-      } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
-        //Serial.println("Linha esquerda detectada!");
-        on_controll_line = false;
-        left_detected = true;
-        right_detected = false; 
-      } else if (CONT_SENSOR_LINE_RIGHT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT) {
-        //Serial.println("Linha direita detectada!");
-        on_controll_line = false;
-        left_detected = false;
-        right_detected = true;
-      } else if(!CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
-        
-
       }
 
-    setMotorTargetRpm(speed, speed); 
+      on_controll_line = true;
+      
+      if((actual_detection - last_detection < 0.8) && odometry.x_pos_ > 0.8) {
+        Serial.print("Stop detecatado");
+        stopMotors(); // Para os motores
+        leftWheel.pwm(0); // Para o motor esquerdo
+        rightWheel.pwm(0); // Para o motor direito
+        Serial.println("Parando o robô");
+        
+      } else if(actual_detection - last_detection > 1.5) {
+        Serial.println("Entre linhas detectado!");
+        Serial.print("Ultima detecção: ");
+        Serial.print(last_detection);
+        Serial.print(" | Detecção atual: ");
+        Serial.print(actual_detection);
+        Serial.print(" | Diferença: ");
+        Serial.println(actual_detection - last_detection);
+      }
+    } else if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
+
+      on_controll_line = false;
+      left_detected = false; // Reseta a detecção de linha esquerda
+      right_detected = false; // Reseta a detecção de linha direita
+      // Mantém velocidade normal
+    } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
+      on_controll_line = false;
+      left_detected = true;
+      right_detected = false; 
+    } else if (CONT_SENSOR_LINE_RIGHT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT) {
+      on_controll_line = false;
+      left_detected = false;
+      right_detected = true;
+    } else if(!CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
+    }
+
     if (right_detected){
         Serial.println("Indo para esquerda");
-        //pwm_right -= 200; // Reduz a velocidade do motor direito
-        setMotorTargetRpm(speed, 0); 
-    }
-    if (left_detected){
+        SerialBT.println("Indo para esquerda");
+        pwm_right -= 250;
+    }else if (left_detected){
+        pwm_left -= 250;
         Serial.println("Indo para direita");
-        setMotorTargetRpm(0 , speed);
-        //pwm_left -= 200; // Reduz a velocidade do motor esquerdo
-        
+        SerialBT.println("Indo para direita");
+    } else {
+        Serial.println("Linha central detectada, mantendo velocidade");
+        SerialBT.println("Linha central detectada, mantendo velocidade");
     }
 
-      leftWheel.pwm(pwm_left);
-      rightWheel.pwm(pwm_right);
+    leftWheel.pwm(pwm_left);
+    rightWheel.pwm(pwm_right);
+    leftWheel.targetRpm = speed;
+    rightWheel.targetRpm = speed;
 
-      motor_last_time = motor_actual_time;
-    }
+    
+    return 3; // Retorna 3 para indicar que o modo seguidor de linha está ativo
+    
   }
   
 

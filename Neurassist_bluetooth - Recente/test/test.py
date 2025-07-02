@@ -15,12 +15,26 @@ def check_bluetooth_system():
         print("Tente executar como administrador: sudo python3 test.py")
         return False
 
+def is_connection_alive(socket_obj):
+    """Verifica se a conexão Bluetooth ainda está ativa"""
+    try:
+        # Envia um comando de teste (apenas tenta enviar dados sem bloquear)
+        socket_obj.settimeout(0.1)
+        socket_obj.send(b'')  # Envia um pacote vazio para testar a conexão
+        return True
+    except socket.timeout:
+        return True  # Timeout é normal, conexão provavelmente OK
+    except:
+        return False  # Qualquer outro erro indica conexão perdida
+    finally:
+        socket_obj.settimeout(0.5)  # Restaura timeout padrão
+
 # Verificação inicial
 print("=== Diagnóstico Bluetooth ===")
 if not check_bluetooth_system():
     exit(1)
 
-target_name = "esp32"
+target_name = "neuro_esp32"
 target_address = None
 
 print(f"\nProcurando dispositivo: {target_name}")
@@ -75,57 +89,164 @@ if target_address is None:
                 target_address = btaddr
                 break
 
+def connect_bluetooth(address, port=1, timeout=10):
+    """Conecta ao dispositivo Bluetooth e retorna o socket"""
+    try:
+        print(f"Criando socket Bluetooth...")
+        s = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        s.settimeout(timeout)
+        print(f"Conectando ao {address}:{port}...")
+        s.connect((address, port))
+        s.settimeout(0.5)  # timeout curto para recv
+        print(f"✓ Conectado com sucesso!")
+        return s
+    except Exception as e:
+        print(f"Erro na conexão: {e}")
+        return None
+
+def auto_reconnect(address, max_attempts=5, delay=3):
+    """Tenta reconectar automaticamente com estratégia progressiva"""
+    for attempt in range(max_attempts):
+        print(f"Tentativa de reconexão {attempt + 1}/{max_attempts}...")
+        
+        # Delay progressivo: 3s, 5s, 7s, 10s, 15s
+        if attempt > 0:
+            wait_time = min(delay + (attempt * 2), 15)
+            print(f"Aguardando {wait_time} segundos antes da próxima tentativa...")
+            time.sleep(wait_time)
+        
+        s = connect_bluetooth(address)
+        if s:
+            print("✓ Reconexão bem-sucedida!")
+            return s
+        else:
+            print(f"✗ Tentativa {attempt + 1} falhou")
+    
+    print("✗ Falha na reconexão automática após todas as tentativas.")
+    return None
+
 if target_address is not None:
     print(f"✓ Tentando conectar ao dispositivo: {target_address}")
     
     serverMACAddress = target_address
     port = 1
-
-    try:
-        print("Criando socket Bluetooth...")
-        s = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-        
-        print(f"Conectando ao {serverMACAddress}:{port}...")
-        s.settimeout(10)  # timeout de conexão aumentado
-        s.connect((serverMACAddress, port))
-        s.settimeout(0.3)  # timeout curto para não travar recv
-        print(f"✓ Conectado com sucesso!")
-
-        while True:
-            text = input("Digite mensagem (quit para sair): ")
-            if text.lower() == "quit":
-                break
+    s = None
+    
+    # Conexão inicial
+    s = connect_bluetooth(serverMACAddress, port)
+    
+    if s:
+        try:
+            last_heartbeat = time.time()
+            heartbeat_interval = 30  # Verifica conexão a cada 30 segundos
             
-            try:
-                s.send(text.encode('utf-8'))
-                print(f"Enviado: {text}")
-            except Exception as e:
-                print(f"Erro ao enviar: {e}")
-                break
+            while True:
+                try:
+                    # Verifica periodicamente se a conexão ainda está ativa
+                    current_time = time.time()
+                    if current_time - last_heartbeat > heartbeat_interval:
+                        if not is_connection_alive(s):
+                            print("⚠ Conexão perdida detectada, tentando reconectar...")
+                            s.close()
+                            s = auto_reconnect(serverMACAddress)
+                            if not s:
+                                break
+                        last_heartbeat = current_time
+                    
+                    text = input("Digite mensagem (quit para sair, reconectar para forçar reconexão, status para verificar conexão): ")
+                    
+                    if text.lower() == "quit":
+                        break
+                    elif text.lower() == "reconectar":
+                        print("🔄 Forçando reconexão...")
+                        s.close()
+                        s = auto_reconnect(serverMACAddress)
+                        if not s:
+                            break
+                        continue
+                    elif text.lower() == "status":
+                        alive = is_connection_alive(s)
+                        print(f"Status da conexão: {'✓ Ativa' if alive else '✗ Inativa'}")
+                        if not alive:
+                            print("Tentando reconectar...")
+                            s.close()
+                            s = auto_reconnect(serverMACAddress)
+                            if not s:
+                                break
+                        continue
+                    
+                    # Limpa mensagens pendentes do ESP32
+                    print("📨 Recebendo mensagens do ESP32...")
+                    try:
+                        while True:
+                            data = s.recv(1024)
+                            if data:
+                                print("📱 Serial ESP32:", data.decode('utf-8').strip())
+                            else:
+                                break
+                    except socket.timeout:
+                        pass
+                    except Exception as e:
+                        print(f"⚠ Erro ao receber dados: {e}")
+                        # Tenta reconectar
+                        print("🔄 Tentando reconectar automaticamente...")
+                        s.close()
+                        s = auto_reconnect(serverMACAddress)
+                        if not s:
+                            break
+                        continue
+                    
+                    # Envia mensagem
+                    try:
+                        s.send(text.encode('utf-8'))
+                        print(f"📤 Enviado: {text}")
+                    except Exception as e:
+                        print(f"⚠ Erro ao enviar: {e}")
+                        # Tenta reconectar
+                        print("🔄 Tentando reconectar automaticamente...")
+                        s.close()
+                        s = auto_reconnect(serverMACAddress)
+                        if not s:
+                            break
+                        continue
 
-            try:
-                data = s.recv(1024)
-                if data:
-                    print("Recebido:", data.decode('utf-8'))
-            except socket.timeout:
-                # Se não receber nada, continua normalmente
-                print("(sem resposta)")
-            except Exception as e:
-                print(f"Erro ao receber: {e}")
-
-    except Exception as e:
-        print("Erro na conexão Bluetooth:", e)
+                    # Tenta receber resposta
+                    try:
+                        data = s.recv(1024)
+                        if data:
+                            print("📥 Recebido:", data.decode('utf-8'))
+                    except socket.timeout:
+                        print("⏱ (sem resposta)")
+                    except Exception as e:
+                        print(f"⚠ Erro ao receber resposta: {e}")
+                        # Não reconecta aqui, pode ser só timeout normal
+                        
+                except KeyboardInterrupt:
+                    print("\n⚠ Interrompido pelo usuário")
+                    break
+                except Exception as e:
+                    print(f"⚠ Erro geral: {e}")
+                    print("🔄 Tentando reconectar automaticamente...")
+                    if s:
+                        s.close()
+                    s = auto_reconnect(serverMACAddress)
+                    if not s:
+                        break
+                    
+        finally:
+            if s:
+                try:
+                    s.close()
+                    print("Conexão fechada")
+                except:
+                    pass
+    else:
+        print("Não foi possível estabelecer conexão inicial.")
         print("\nPossíveis soluções:")
         print("1. Verifique se o ESP32 está em modo de pareamento")
         print("2. Tente executar como administrador: sudo python3 test.py")
         print("3. Pareie o dispositivo primeiro nas configurações do sistema")
         print("4. Verifique se a porta RFCOMM (1) está correta")
-    finally:
-        try:
-            s.close()
-            print("Conexão fechada")
-        except:
-            pass
 else:
     print("\n✗ Não foi possível encontrar o dispositivo Bluetooth alvo.")
     print("\nDispositivos encontrados:")
