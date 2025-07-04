@@ -1,0 +1,6 @@
+# Dependências para a interface gráfica Bluetooth
+pybluez2
+# tkinter já vem incluído no Python 3
+# Para instalar no Ubuntu/Debian:
+# sudo apt-get install python3-tk python3-dev libbluetooth-dev
+# pip3 install pybluez2

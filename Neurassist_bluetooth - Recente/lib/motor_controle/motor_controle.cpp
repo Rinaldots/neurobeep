@@ -8,8 +8,8 @@
 unsigned long motor_last_time = 0, motor_actual_time = 0;
 unsigned long odometry_last_time = 0; // Para controlar o tempo da odometria
 float delta_distance = 0.0f; // Variável para armazenar a distância percorrida
-MOTOR rightWheel(A_IA, A_IB, false);
-MOTOR leftWheel(B_IA, B_IB, false);
+MOTOR rightWheel(A_IA, A_IB, -1);  // -1 indica que não há pino de reversão
+MOTOR leftWheel(B_IA, B_IB, REVERSE_PIN);
 PID leftWheel_PID(&leftWheel.currentRpm, &leftWheel.pwmOutput, &leftWheel.targetRpm, 
                   DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, DIRECT);
 PID rightWheel_PID(&rightWheel.currentRpm, &rightWheel.pwmOutput, &rightWheel.targetRpm, 
@@ -31,10 +31,10 @@ void IRAM_ATTR b_encoder() {
 
 // PIN A -> Input
 // PIN B -> PWM Input 
-MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted) {
+MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, int reverse_pin) {
   this->PIN_A = motor_pin_a;
   this->PIN_PWM_CHANNEL = motor_pin_b;
-  this->inverted = is_inverted;
+  this->PIN_INVERTED = reverse_pin;
   
   this->current_position = 0;
   this->previous_position = 0;
@@ -44,27 +44,52 @@ MOTOR::MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted) {
   this->currentRpm = 0.0;
   this->targetRpm = 0.0;
   this->pwmOutput = 0.0;
-
+  
+  // Configurar pino A como saída
   ledcAttach(this->PIN_A, freq, resolution);
   ledcAttach(this->PIN_PWM_CHANNEL, freq, resolution);
+  if (this->PIN_INVERTED > 0){
+    ledcAttach(this->PIN_INVERTED, freq, resolution);
+  }
+  
 }
 
 
-void MOTOR::pwm(int PWM) {
-  if ( PWM >= 1023) {
-    PWM = 1023; // Limita o PWM a 1023
+void MOTOR::pwm(int PWM, bool reverse) {
+  // Limita o PWM entre 0 e 1023
+  if (PWM >= 1023) {
+    PWM = 1023;
   } else if (PWM < 0) {
-    PWM = 0; // Limita o PWM a -1023
+    PWM = 0;
   }
-  if (PWM > 0) {
-    ledcWrite(PIN_PWM_CHANNEL, PWM);
-    ledcWrite(PIN_A, 1023);
-  } 
-  else {
-    ledcWrite(PIN_PWM_CHANNEL, PWM);
+  
+  if (PWM == 0) {
+    // Motor parado - todos os pinos em 0
+    ledcWrite(PIN_PWM_CHANNEL, 0);
     ledcWrite(PIN_A, 0);
+    if (PIN_INVERTED > 0) {
+      ledcWrite(PIN_INVERTED, 0);
+    }
+  } else {
+    // Motor ligado
+    ledcWrite(PIN_PWM_CHANNEL, PWM);
+    
+    if (reverse) {
+      // Movimento para trás
+      ledcWrite(PIN_A, 0);
+      if (PIN_INVERTED > 0) {
+        ledcWrite(PIN_INVERTED, 1023);
+      }
+    } else {
+      // Movimento para frente
+      ledcWrite(PIN_A, 1023);
+      if (PIN_INVERTED > 0) {
+        ledcWrite(PIN_INVERTED, 0);
+      }
+    }
   }
 }
+
 
 void MOTOR::calculateCurrentRpm() {
   current_time = millis();

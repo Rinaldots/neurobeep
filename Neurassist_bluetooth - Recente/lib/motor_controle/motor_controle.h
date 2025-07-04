@@ -14,7 +14,7 @@ class MOTOR {
   public:
     // Pinos do motor
     int PIN_A, PIN_PWM_CHANNEL;
-    bool inverted; // Inverte a direção do motor CASO seja necessário
+    int PIN_INVERTED; // Pino para inversão de direção (ou -1 se não usado)
 
     //ariaveis para o encoder
     volatile long current_position = 0, previous_position = 0;
@@ -26,8 +26,8 @@ class MOTOR {
     double targetRpm = 0;   
     double pwmOutput = 0;    
 
-    MOTOR(int motor_pin_a, int motor_pin_b, bool is_inverted);
-    void pwm(int PWM);
+    MOTOR(int motor_pin_a, int motor_pin_b, int reverse_pin);
+    void pwm(int PWM, bool reverse = false); // Função para definir o PWM do motor
     void stop_motor();
     void calculateCurrentRpm();
 }; 

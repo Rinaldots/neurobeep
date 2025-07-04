@@ -16,6 +16,7 @@
 #define A_IB 33
 #define B_IA 25
 #define B_IB 26
+#define REVERSE_PIN 23
 // Definições de pinos do encoder
 #define EN_A 27
 #define EN_B 14
@@ -25,7 +26,7 @@
 // Definições de pinos PID padrao dos motores
 const float DEFAULT_KP = 4.0f, DEFAULT_KI = 1.0f, DEFAULT_KD = 0.2f;
 
-const int motor_startup = 900;
+const int motor_startup = 700;
 
 // Frequência e resolução do PWM
 const int freq = 5000 , resolution = 10;
@@ -35,5 +36,5 @@ const float ENCODER_PULSES_PER_REVOLUTION = 20.0f;
 const float wheels_y_distance_ = 0.16f; // Distância entre as rodas (em metros)
 // Circunferência da roda (em metros)
 const float wheel_circumference_ = 0.065f * 3.141;
-const int time_update = 150;
+const int time_update = 100;
 #endif // CONFIG_H

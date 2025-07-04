@@ -17,9 +17,9 @@ void IRAM_ATTR onSensorTimer() {
     int centerValue = analogRead(SENSOR_LINE_CENTER);
     
     // Considera linha detectada se valor > 4090
-    CONT_SENSOR_LINE_LEFT = (leftValue > 4090);
-    CONT_SENSOR_LINE_RIGHT = (rightValue > 4090);
-    CONT_SENSOR_LINE_CENTER = (centerValue > 4090);
+    CONT_SENSOR_LINE_LEFT = (leftValue > 4094);
+    CONT_SENSOR_LINE_RIGHT = (rightValue > 4094);
+    CONT_SENSOR_LINE_CENTER = (centerValue > 4094);
 }
 
 void setupSensors() {

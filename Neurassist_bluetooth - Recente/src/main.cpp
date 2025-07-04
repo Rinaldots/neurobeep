@@ -12,7 +12,7 @@ void setup() {
   setupMotors(); // Configura os motores
   setupSensors(); // Configura os sensores
 }
-int estado = 3;
+int estado = 0;
 int temp_estado = 0;
 int temp_estado_motor = 1;
 void loop() {
