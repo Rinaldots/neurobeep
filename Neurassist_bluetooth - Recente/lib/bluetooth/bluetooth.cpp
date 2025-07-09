@@ -169,7 +169,7 @@ switch (drive_mode)
       Serial.println("Modo seguidor de linha iniciado");
     }
     int motor_actual_time = millis();   
-    int speed = 70; // Velocidade padrão para o seguidor de linha
+    int speed = 40; // Velocidade padrão para o seguidor de linha
     if (motor_actual_time - motor_last_time > time_update) { 
       motorSpeed();
       motor_last_time = motor_actual_time;
