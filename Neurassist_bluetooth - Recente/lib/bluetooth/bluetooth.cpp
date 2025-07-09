@@ -169,7 +169,7 @@ switch (drive_mode)
       Serial.println("Modo seguidor de linha iniciado");
     }
     int motor_actual_time = millis();   
-    int speed = 40; // Velocidade padrão para o seguidor de linha
+    int speed = 70; // Velocidade padrão para o seguidor de linha
     if (motor_actual_time - motor_last_time > time_update) { 
       motorSpeed();
       motor_last_time = motor_actual_time;
@@ -228,11 +228,11 @@ switch (drive_mode)
     leftWheel.targetRpm = speed;
     rightWheel.targetRpm = speed;
     if (right_detected){
-        pwm_right -= 350;
-        rightWheel.targetRpm = speed/2; // Ajusta a velocidade do motor direito
+        pwm_right -= 250;
+        //rightWheel.targetRpm = speed/1.5; // Ajusta a velocidade do motor direito
     }else if (left_detected){
-        pwm_left -= 350;
-        leftWheel.targetRpm = speed/2;// Ajusta a velocidade do motor esquerdo
+        pwm_left -= 250;
+        //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
     } else {
     }
 

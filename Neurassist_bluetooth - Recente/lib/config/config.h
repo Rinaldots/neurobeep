@@ -26,7 +26,7 @@
 // Definições de pinos PID padrao dos motores
 const float DEFAULT_KP = 4.0f, DEFAULT_KI = 1.0f, DEFAULT_KD = 0.2f;
 
-const int motor_startup = 700;
+const int motor_startup = 800;
 
 // Frequência e resolução do PWM
 const int freq = 5000 , resolution = 10;
