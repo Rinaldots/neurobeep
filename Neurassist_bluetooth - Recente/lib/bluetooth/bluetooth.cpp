@@ -153,29 +153,13 @@ switch (drive_mode)
       if (motor_actual_time - motor_last_time > time_update) { 
         motorSpeed();
         motor_last_time = motor_actual_time;
-
-        SerialBT.println(); 
-        SerialBT.print("Detecção de linha: ");
-        if (CONT_SENSOR_LINE_LEFT) {
-          SerialBT.print("Esquerda |");
-        }else {
-          SerialBT.print("-------- |");
-        }
-        if (CONT_SENSOR_LINE_CENTER) {
-          SerialBT.print("Centro |");
-        } else {
-          SerialBT.print("------ |");
-        }
-        if (CONT_SENSOR_LINE_RIGHT) {
-          SerialBT.println("Direita ");
-        }else {
-          SerialBT.println("------- ");
-        }
       }
       int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);    
       int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup); 
-    
-    if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
+    if(CONT_SENSOR_LINE_CENTER && CONT_SENSOR_LINE_LEFT && CONT_SENSOR_LINE_RIGHT) {
+      left_detected = false; // Reseta a detecção de linha esquerda
+      right_detected = false; // Reseta a detecção de linha direita
+    } else if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
       left_detected = false; // Reseta a detecção de linha esquerda
       right_detected = false; // Reseta a detecção de linha direita
     } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
@@ -188,11 +172,11 @@ switch (drive_mode)
     leftWheel.targetRpm = speed;
     rightWheel.targetRpm = speed;
     if (right_detected){
-        pwm_right -= 250;
-        //rightWheel.targetRpm = speed/1.5; // Ajusta a velocidade do motor direito
+        pwm_right -= 200;
+        rightWheel.targetRpm = speed/1.5; // Ajusta a velocidade do motor direito
     }else if (left_detected){
-        pwm_left -= 250;
-        //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
+        pwm_left -= 200;
+        leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
     }
   
     
@@ -209,3 +193,22 @@ switch (drive_mode)
   return -1;
 }
 
+void readSensors() {
+    SerialBT.println(); 
+    SerialBT.print("Detecção de linha: ");
+    if (CONT_SENSOR_LINE_LEFT) {
+        SerialBT.print("Esquerda | ");
+    }else {
+        SerialBT.print("-------- | ");
+    }
+    if (CONT_SENSOR_LINE_CENTER) {
+        SerialBT.print("Centro | ");
+    } else {
+        SerialBT.print("------ | ");
+    }
+    if (CONT_SENSOR_LINE_RIGHT) {
+        SerialBT.println("Direita ");
+    }else {
+        SerialBT.println("------- ");
+    }
+}
