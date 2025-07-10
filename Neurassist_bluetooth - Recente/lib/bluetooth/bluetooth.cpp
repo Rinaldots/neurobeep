@@ -153,6 +153,24 @@ switch (drive_mode)
       if (motor_actual_time - motor_last_time > time_update) { 
         motorSpeed();
         motor_last_time = motor_actual_time;
+
+        SerialBT.println(); 
+        SerialBT.print("Detecção de linha: ");
+        if (CONT_SENSOR_LINE_LEFT) {
+          SerialBT.print("Esquerda |");
+        }else {
+          SerialBT.print("-------- |");
+        }
+        if (CONT_SENSOR_LINE_CENTER) {
+          SerialBT.print("Centro |");
+        } else {
+          SerialBT.print("------ |");
+        }
+        if (CONT_SENSOR_LINE_RIGHT) {
+          SerialBT.println("Direita ");
+        }else {
+          SerialBT.println("------- ");
+        }
       }
       int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);    
       int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup); 
@@ -176,23 +194,8 @@ switch (drive_mode)
         pwm_left -= 250;
         //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
     }
-    SerialBT.println(); 
-    SerialBT.print("Detecção de linha: ");
-    if (CONT_SENSOR_LINE_LEFT) {
-      SerialBT.print("Esquerda |");
-    }else {
-      SerialBT.print("-------- |");
-    }
-    if (CONT_SENSOR_LINE_CENTER) {
-      SerialBT.print("Centro |");
-    } else {
-      SerialBT.print("------ |");
-    }
-    if (CONT_SENSOR_LINE_RIGHT) {
-      SerialBT.print("Direita ");
-    }else {
-      SerialBT.print("------- ");
-    }
+  
+    
     leftWheel.pwm(pwm_left, false);
     rightWheel.pwm(pwm_right, false);
     readSensors();
