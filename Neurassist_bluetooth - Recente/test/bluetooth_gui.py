@@ -119,6 +119,39 @@ class BluetoothGUI:
                                                   state="disabled", wrap=tk.WORD)
         self.sent_text.grid(row=5, column=0, pady=2, sticky=(tk.W, tk.E, tk.N, tk.S))
         
+        # Botão para limpar terminais
+        clear_button = ttk.Button(comm_frame, text="Limpar Terminais", 
+                                 command=self.clear_terminals)
+        clear_button.grid(row=6, column=0, pady=5, sticky=tk.W)
+        
+        # Label de estatísticas
+        self.stats_label = ttk.Label(comm_frame, text="Enviadas: 0 | Recebidas: 0")
+        self.stats_label.grid(row=7, column=0, pady=5, sticky=tk.W)
+        
+        # Contadores
+        self.sent_count = 0
+        self.received_count = 0
+        
+        # Frame para comandos rápidos
+        quick_commands_frame = ttk.LabelFrame(control_frame, text="Comandos Rápidos", padding="5")
+        quick_commands_frame.grid(row=5, column=0, columnspan=2, pady=10, sticky=(tk.W, tk.E))
+        
+        # Botões de comandos rápidos
+        commands = [
+            ("Parar (P)", "P"),
+            ("Andar (A)", "A"),
+            ("Seguir Linha (S)", "S"),
+            ("Status (E)", "E")
+        ]
+        
+        for i, (text, cmd) in enumerate(commands):
+            btn = ttk.Button(quick_commands_frame, text=text, 
+                           command=lambda c=cmd: self.send_quick_command(c))
+            btn.grid(row=i//2, column=i%2, padx=2, pady=2, sticky=(tk.W, tk.E))
+        
+        quick_commands_frame.columnconfigure(0, weight=1)
+        quick_commands_frame.columnconfigure(1, weight=1)
+        
         # Configuração do redimensionamento
         control_frame.columnconfigure(0, weight=1)
         control_frame.columnconfigure(1, weight=1)
@@ -225,13 +258,53 @@ class BluetoothGUI:
     
     def _receive_thread(self):
         """Thread para recepção de mensagens"""
+        buffer = b""  # Buffer para acumular dados parciais
         while not self.stop_event.is_set() and self.socket:
             try:
                 self.socket.settimeout(1.0)
                 data = self.socket.recv(1024)
                 if data:
-                    message = data.decode('utf-8').strip()
-                    self.message_queue.put(("receive", message, ""))
+                    buffer += data
+                    
+                    # Tenta decodificar o buffer completo
+                    try:
+                        # Procura por quebras de linha para processar mensagens completas
+                        while b'\n' in buffer:
+                            line, buffer = buffer.split(b'\n', 1)
+                            if line:
+                                try:
+                                    message = line.decode('utf-8').strip()
+                                    if message:
+                                        self.message_queue.put(("receive", message, ""))
+                                except UnicodeDecodeError:
+                                    # Se não conseguir decodificar, tenta com latin-1
+                                    try:
+                                        message = line.decode('latin-1').strip()
+                                        if message:
+                                            self.message_queue.put(("receive", f"[RAW] {message}", ""))
+                                    except:
+                                        # Se ainda assim falhar, mostra em hexadecimal
+                                        hex_data = ' '.join(f'{b:02x}' for b in line)
+                                        self.message_queue.put(("receive", f"[HEX] {hex_data}", ""))
+                        
+                        # Se o buffer ficou muito grande sem quebras de linha, processa parte dele
+                        if len(buffer) > 2048:
+                            try:
+                                message = buffer.decode('utf-8', errors='ignore').strip()
+                                if message:
+                                    self.message_queue.put(("receive", message, ""))
+                                buffer = b""
+                            except:
+                                buffer = buffer[-1024:]  # Mantém apenas os últimos 1024 bytes
+                                
+                    except UnicodeDecodeError as e:
+                        # Se há erro de decodificação, mantém os dados no buffer
+                        # e tenta novamente quando mais dados chegarem
+                        if len(buffer) > 2048:
+                            # Se o buffer está muito grande, descarta parte dele
+                            buffer = buffer[-1024:]
+                        continue
+                        
             except socket.timeout:
                 continue
             except Exception as e:
@@ -267,12 +340,72 @@ class BluetoothGUI:
             return
         
         try:
-            self.socket.send(message.encode('utf-8'))
-            self.log_message(f"📤 {message}", "sent")
+            # Adiciona quebra de linha se não houver
+            if not message.endswith('\n'):
+                message += '\n'
+            
+            # Envia em UTF-8 com tratamento de erro
+            data_to_send = message.encode('utf-8')
+            self.socket.send(data_to_send)
+            
+            # Log da mensagem enviada (sem a quebra de linha)
+            display_message = message.rstrip('\n')
+            self.log_message(f"📤 {display_message}", "sent")
             self.message_entry.delete(0, tk.END)
+            
+            # Atualiza contador de mensagens enviadas
+            self.sent_count += 1
+            self.update_stats_label()
+            
         except Exception as e:
             self.log_message(f"⚠ Erro ao enviar: {e}", "sent")
             messagebox.showerror("Erro", f"Erro ao enviar mensagem: {e}")
+            
+            # Tenta reconectar se o erro for de conexão
+            if "Broken pipe" in str(e) or "not connected" in str(e).lower():
+                self.log_message("🔄 Tentando reconectar...", "received")
+                self.disconnect_device()
+                self._auto_reconnect()
+    
+    def _auto_reconnect(self):
+        """Tenta reconectar automaticamente em thread separada"""
+        if not self.target_address:
+            return
+        
+        reconnect_thread = threading.Thread(target=self._reconnect_thread)
+        reconnect_thread.daemon = True
+        reconnect_thread.start()
+    
+    def _reconnect_thread(self):
+        """Thread para reconexão automática"""
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            self.message_queue.put(("log", f"Tentativa de reconexão {attempt + 1}/{max_attempts}...", "received"))
+            
+            if attempt > 0:
+                time.sleep(3)  # Aguarda 3 segundos entre tentativas
+            
+            try:
+                self.socket = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+                self.socket.settimeout(10)
+                self.socket.connect((self.target_address, 1))
+                self.socket.settimeout(0.5)
+                
+                self.message_queue.put(("connected", "", ""))
+                
+                # Reinicia thread de recepção
+                self.stop_event.clear()
+                self.receive_thread = threading.Thread(target=self._receive_thread)
+                self.receive_thread.daemon = True
+                self.receive_thread.start()
+                
+                self.message_queue.put(("log", "✓ Reconexão bem-sucedida!", "received"))
+                return
+                
+            except Exception as e:
+                self.message_queue.put(("log", f"✗ Tentativa {attempt + 1} falhou: {e}", "received"))
+        
+        self.message_queue.put(("log", "✗ Falha na reconexão após todas as tentativas", "received"))
     
     def process_message_queue(self):
         """Processa mensagens da fila (executado na thread principal)"""
@@ -294,6 +427,9 @@ class BluetoothGUI:
                     messagebox.showerror("Erro de Conexão", f"Não foi possível conectar: {message}")
                 elif msg_type == "receive":
                     self.log_message(f"📱 {message}", "received")
+                    # Atualiza contador de mensagens recebidas
+                    self.received_count += 1
+                    self.update_stats_label()
                 elif msg_type == "receive_error":
                     self.log_message(f"⚠ Erro na recepção: {message}", "received")
                     
@@ -329,11 +465,43 @@ class BluetoothGUI:
             self.received_text.insert(tk.END, formatted_message)
             self.received_text.config(state="disabled")
             self.received_text.see(tk.END)
+            
+            # Incrementa contador se for uma mensagem real (não de log do sistema)
+            if message.startswith("📱"):
+                self.received_count += 1
+                self.update_stats()
+                
         elif msg_type == "sent":
             self.sent_text.config(state="normal")
             self.sent_text.insert(tk.END, formatted_message)
             self.sent_text.config(state="disabled")
             self.sent_text.see(tk.END)
+            
+            # Incrementa contador se for uma mensagem real
+            if message.startswith("📤"):
+                self.sent_count += 1
+                self.update_stats()
+    
+    def clear_terminals(self):
+        """Limpa ambos os terminais"""
+        self.received_text.config(state="normal")
+        self.received_text.delete(1.0, tk.END)
+        self.received_text.config(state="disabled")
+        
+        self.sent_text.config(state="normal")
+        self.sent_text.delete(1.0, tk.END)
+        self.sent_text.config(state="disabled")
+        
+        # Reset dos contadores
+        self.sent_count = 0
+        self.received_count = 0
+        self.update_stats()
+        
+        self.log_message("🧹 Terminais limpos", "received")
+    
+    def update_stats(self):
+        """Atualiza as estatísticas de mensagens"""
+        self.stats_label.config(text=f"Enviadas: {self.sent_count} | Recebidas: {self.received_count}")
     
     def on_closing(self):
         """Cleanup quando a janela é fechada"""

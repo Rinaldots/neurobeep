@@ -69,7 +69,8 @@ void feedbackBluetooth() {
     SerialBT.println(CONT_SENSOR_LINE_RIGHT);
 }
 
-
+long last_bluetooth_time = 0; // Variável para armazenar o último tempo de leitura do Bluetooth
+long actual_bluetooth_time = 0; // Variável para armazenar o tempo atual de leitura do Bluetooth
 int callbackBluetooth() {
     // Verifica se há um cliente conectado
     static bool clienteConectado = false;
@@ -80,7 +81,6 @@ int callbackBluetooth() {
         Serial.println("Cliente Bluetooth desconectado!");
         clienteConectado = false;
     }
-    
     if (SerialBT.available()) {
         char recebido = SerialBT.read();
         Serial.print("Recebido via Bluetooth: ");
@@ -153,6 +153,7 @@ switch (drive_mode)
       if (motor_actual_time - motor_last_time > time_update) { 
         motorSpeed();
         motor_last_time = motor_actual_time;
+        readSensors(); // Lê os sensores a cada 100ms
       }
       int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);    
       int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup); 
@@ -195,20 +196,20 @@ switch (drive_mode)
 
 void readSensors() {
     SerialBT.println(); 
-    SerialBT.print("Detecção de linha: ");
+    SerialBT.print("Detecção de linha:->");
     if (CONT_SENSOR_LINE_LEFT) {
-        SerialBT.print("Esquerda | ");
+        SerialBT.print("Esquerda|");
     }else {
-        SerialBT.print("-------- | ");
+        SerialBT.print("--------|");
     }
     if (CONT_SENSOR_LINE_CENTER) {
-        SerialBT.print("Centro | ");
+        SerialBT.print("Centro|");
     } else {
-        SerialBT.print("------ | ");
+        SerialBT.print("------|");
     }
     if (CONT_SENSOR_LINE_RIGHT) {
-        SerialBT.println("Direita ");
+        SerialBT.println("Direita");
     }else {
-        SerialBT.println("------- ");
+        SerialBT.println("-------");
     }
 }
