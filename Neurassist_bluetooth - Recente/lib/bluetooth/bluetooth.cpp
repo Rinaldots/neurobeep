@@ -195,7 +195,7 @@ switch (drive_mode)
     }
     leftWheel.pwm(pwm_left, false);
     rightWheel.pwm(pwm_right, false);
-    
+    readSensors();
 
     return 3; // Retorna 3 para indicar que o modo seguidor de linha está ativo
   }
