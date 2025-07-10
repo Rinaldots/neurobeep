@@ -138,27 +138,14 @@ switch (drive_mode)
     break;
   case 2: {
   // Modo andar para frente tentando completar um deslocamento
-    bool completed = false;
-
-    if (abs(delta_distance) < odometry.x_pos_) {
-      completed = true; // Se delta_distance for negativo, consideramos que o movimento foi completado
-      leftWheel.pwm(0);
-      rightWheel.pwm(0);
-      leftWheel.targetRpm = 0;
-      rightWheel.targetRpm = 0;
-      return 0; // Não faz nada se delta_distance for zero
-    }
+    
     if (motor_actual_time - motor_last_time > time_update) { // Atualiza a cada 500ms
-      if(!completed) {
-        setMotorTargetRpm(100, 100); // Define a velocidade alvo dos motores
-        motorSpeed();
-        leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
-        rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
-        motor_last_time = motor_actual_time;
-        Serial.println("Delta Distance: " + String(delta_distance));
-        Serial.print(" |  Odometry Position: (" + String(odometry.x_pos_) + ", " + String(odometry.y_pos_) + ")");
-      }
+      setMotorTargetRpm(60, 60); // Define a velocidade alvo dos motores
+      motorSpeed();
+      motor_last_time = motor_actual_time;
     }
+    leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
+    rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
     break;
   }
   case 3: {
