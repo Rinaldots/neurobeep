@@ -199,8 +199,7 @@ switch (drive_mode)
               float diferenca = distance_end_position - distance_start_position;            
               if(diferenca < 20 && diferenca > 5) {
                   startup_line = false; // Reseta a variável de início de linha
-                  counting_distance = false; // Para de contar
-                  return 4;  
+                  counting_distance = false; // Para de contar  
               } else {
                   // Distância não adequada, continua e reseta para próxima medição
                   counting_distance = false;

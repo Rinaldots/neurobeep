@@ -1,6 +1,7 @@
 import bluetooth
 import socket
 import time
+import asyncio
 
 # Função para debug e verificação do sistema
 def check_bluetooth_system():
@@ -210,16 +211,20 @@ if target_address is not None:
                             break
                         continue
 
-                    # Tenta receber resposta
-                    try:
-                        data = s.recv(1024)
-                        if data:
-                            print("📥 Recebido:", data.decode('utf-8'))
-                    except socket.timeout:
-                        print("⏱ (sem resposta)")
-                    except Exception as e:
-                        print(f"⚠ Erro ao receber resposta: {e}")
-                        # Não reconecta aqui, pode ser só timeout normal
+                    async def async_recv(s, loop):
+                        try:
+                            data = await loop.run_in_executor(None, s.recv, 1024)
+                            if data:
+                                print("📥 Recebido:", data.decode('utf-8'))
+                        except socket.timeout:
+                            print("⏱ (sem resposta)")
+                        except Exception as e:
+                            print(f"⚠ Erro ao receber resposta: {e}")
+                            # Não reconecta aqui, pode ser só timeout normal
+
+                    # Dentro do loop principal, substitua por:
+                    loop = asyncio.get_event_loop()
+                    await async_recv(s, loop)
                         
                 except KeyboardInterrupt:
                     print("\n⚠ Interrompido pelo usuário")
