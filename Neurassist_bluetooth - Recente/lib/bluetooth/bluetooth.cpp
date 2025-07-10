@@ -166,50 +166,14 @@ switch (drive_mode)
     
     actual_detection_position = ((leftWheel.current_position+rightWheel.current_position)/2); 
     
-    // Detecta linha de controle (todos os sensores ativos)
-    if (CONT_SENSOR_LINE_LEFT && CONT_SENSOR_LINE_RIGHT && CONT_SENSOR_LINE_CENTER) {
-      if(!on_controll_line){
-          // Primeira detecção da linha de controle
-          on_controll_line = true;
-          Serial.println("Linha de controle detectada!");
-      }
-    } 
-    // Parte de girar
-    /*else {
-      // Não está mais na linha de controle
-      if(on_controll_line) {
-          // Acabou de sair da linha de controle
-          on_controll_line = false;
-          if(!counting_distance) {
-              counting_distance = true;
-              distance_start_position = actual_detection_position;
-          } else {
-              distance_end_position = actual_detection_position;
-              float diferenca = distance_end_position - distance_start_position;            
-              if(diferenca < 20 && diferenca > 5) {
-                  startup_line = false; // Reseta a variável de início de linha
-                  counting_distance = false; // Para de contar  
-              } else {
-                  // Distância não adequada, continua e reseta para próxima medição
-                  counting_distance = false;
-                  last_controll_line = diferenca;
-                  SerialBT.println("Linha de central de controle distancia:");
-                  SerialBT.print(diferenca);
-              }
-          }
-      }
-    }*/
     if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
-      on_controll_line = false;
       left_detected = false; // Reseta a detecção de linha esquerda
       right_detected = false; // Reseta a detecção de linha direita
       
     } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
-      on_controll_line = false;
       left_detected = true;
       right_detected = false; 
     } else if (CONT_SENSOR_LINE_RIGHT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT) {
-      on_controll_line = false;
       left_detected = false;
       right_detected = true;
     }
@@ -247,58 +211,6 @@ switch (drive_mode)
 
     return 3; // Retorna 3 para indicar que o modo seguidor de linha está ativo
   }
-  /*case 4:{
-    // Modo Rotacionar no Fim - Gira até encontrar linha central
-    if (!fist_rotate){
-      fist_rotate = true; // Marca que a rotação foi iniciada
-      rotate_last_time = millis(); // Marca o tempo de início da rotação
-      Serial.println("Iniciando rotação...");
-    }
-    
-    unsigned long rotate_actual_time = millis();   
-    int rotate_time = 1500; // Tempo de rotação em milissegundos
-    int speed = 80; // Velocidade de rotação
-
-    if (motor_actual_time - motor_last_time > time_update) { 
-      leftWheel.targetRpm = speed;
-      rightWheel.targetRpm = speed;
-      motorSpeed();
-      motor_last_time = motor_actual_time;
-    }
-    if(rotate_actual_time - rotate_last_time > rotate_time) {
-      //Serial.println("Tempo de rotação atingido, verificando sensores...");
-      
-      if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
-        Serial.println("Linha central encontrada! Parando rotação.");
-        leftWheel.targetRpm = 0; // Para o motor esquerdo
-        rightWheel.targetRpm = 0; // Para o motor direito
-        leftWheel.pwm(0, false); // Para o motor esquerdo
-        rightWheel.pwm(0, false); // Para o motor direito
-        Serial.println("Robô parado - linha central detectada");
-        
-        // Reset das variáveis para próxima rotação
-        fist_rotate = false;
-        rotate_last_time = 0;
-        
-        return 3; // Retorna ao modo seguir linha
-      } else {
-        // Continua girando
-        leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup), true);  // Esquerdo para trás
-        rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup), false); // Direito para frente
-        
-        // Reset do timer para continuar girando
-        //rotate_last_time = millis();
-      }
-    } else {
-      // Ainda dentro do tempo de rotação
-      leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup), true);  // Esquerdo para trás
-      rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup), false); // Direito para frente
-    }
-    
-    return 4;
-  }*/
-
-  
   default:
 
     break;
