@@ -173,7 +173,9 @@ switch (drive_mode)
           on_controll_line = true;
           Serial.println("Linha de controle detectada!");
       }
-    } else {
+    } 
+    // Parte de girar
+    /*else {
       // Não está mais na linha de controle
       if(on_controll_line) {
           // Acabou de sair da linha de controle
@@ -196,7 +198,7 @@ switch (drive_mode)
               }
           }
       }
-    }
+    }*/
     if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
       on_controll_line = false;
       left_detected = false; // Reseta a detecção de linha esquerda
@@ -221,6 +223,8 @@ switch (drive_mode)
         //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
     } else {
     }
+
+    SerialBT.println(); 
     SerialBT.print("Detecção de linha: ");
     if (CONT_SENSOR_LINE_LEFT) {
       SerialBT.print("Esquerda ");
@@ -243,7 +247,7 @@ switch (drive_mode)
 
     return 3; // Retorna 3 para indicar que o modo seguidor de linha está ativo
   }
-  case 4:{
+  /*case 4:{
     // Modo Rotacionar no Fim - Gira até encontrar linha central
     if (!fist_rotate){
       fist_rotate = true; // Marca que a rotação foi iniciada
@@ -292,7 +296,7 @@ switch (drive_mode)
     }
     
     return 4;
-  }
+  }*/
 
   
   default:

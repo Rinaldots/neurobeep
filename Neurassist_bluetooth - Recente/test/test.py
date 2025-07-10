@@ -217,7 +217,7 @@ if target_address is not None:
                             stop_event.clear()
                             receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
                             receive_thread.start()
-                        continue
+                        continueP
                     
                     # Envia mensagem
                     try:
