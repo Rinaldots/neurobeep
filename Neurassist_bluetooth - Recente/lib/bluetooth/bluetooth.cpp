@@ -108,10 +108,7 @@ int callbackBluetooth() {
 }
 
 int motorHandler(int drive_mode) {
- /* 
- drive_mode = 0; // Força o modo de controle por RPM
- drive_mode = 1; // Força o modo de controle por deslocamento
- */
+
 motor_actual_time = millis();
 switch (drive_mode)
   {
@@ -146,30 +143,23 @@ switch (drive_mode)
     }
     leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
     rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
-    break;
+    return 2; // Retorna 2 para indicar que o modo deslocamento está ativo
   }
   case 3: {
     //Modo seguidor de linha  
-    if(!startup_line){
-      startup_line = true;
-      counting_distance = false; 
-      Serial.println("Modo seguidor de linha iniciado");
-    }
-    int motor_actual_time = millis();   
-    int speed = 40; // Velocidade padrão para o seguidor de linha
-    if (motor_actual_time - motor_last_time > time_update) { 
-      motorSpeed();
-      motor_last_time = motor_actual_time;
-    }
-    int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);    
-    int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup); 
     
-    actual_detection_position = ((leftWheel.current_position+rightWheel.current_position)/2); 
+      int motor_actual_time = millis();   
+      int speed = 40; // Velocidade padrão para o seguidor de linha
+      if (motor_actual_time - motor_last_time > time_update) { 
+        motorSpeed();
+        motor_last_time = motor_actual_time;
+      }
+      int pwm_left = static_cast<int>(leftWheel.pwmOutput+motor_startup);    
+      int pwm_right = static_cast<int>(rightWheel.pwmOutput+motor_startup); 
     
     if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
       left_detected = false; // Reseta a detecção de linha esquerda
       right_detected = false; // Reseta a detecção de linha direita
-      
     } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
       left_detected = true;
       right_detected = false; 
@@ -185,7 +175,6 @@ switch (drive_mode)
     }else if (left_detected){
         pwm_left -= 250;
         //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
-    } else {
     }
     SerialBT.println(); 
     SerialBT.print("Detecção de linha: ");
@@ -198,6 +187,7 @@ switch (drive_mode)
       SerialBT.print("Centro |");
     } else {
       SerialBT.print("------ |");
+    }
     if (CONT_SENSOR_LINE_RIGHT) {
       SerialBT.print("Direita ");
     }else {
@@ -210,8 +200,9 @@ switch (drive_mode)
     return 3; // Retorna 3 para indicar que o modo seguidor de linha está ativo
   }
   default:
-
-    break;
+    return -1;
   }
+  
   return -1;
 }
+
