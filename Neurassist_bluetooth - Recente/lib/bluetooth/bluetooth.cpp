@@ -215,7 +215,7 @@ switch (drive_mode)
       on_controll_line = false;
       left_detected = false; // Reseta a detecção de linha esquerda
       right_detected = false; // Reseta a detecção de linha direita
-      // Mantém velocidade normal
+      
     } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
       on_controll_line = false;
       left_detected = true;
@@ -235,6 +235,21 @@ switch (drive_mode)
         //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
     } else {
     }
+    SerialBT.print("Detecção de linha: ");
+    if (CONT_SENSOR_LINE_LEFT) {
+      SerialBT.print("Esquerda ");
+    }
+    if (CONT_SENSOR_LINE_CENTER) {
+      SerialBT.print("Centro ");
+    }
+    if (CONT_SENSOR_LINE_RIGHT) {
+      SerialBT.print("Direita ");
+    }
+    SerialBT.println(); 
+    SerialBT.print("Contador esquerdo: ");
+    SerialBT.print(leftWheel.current_position);
+    SerialBT.print(" | Contador direito: ");
+    SerialBT.println(rightWheel.current_position);
 
     leftWheel.pwm(pwm_left, false);
     rightWheel.pwm(pwm_right, false);
