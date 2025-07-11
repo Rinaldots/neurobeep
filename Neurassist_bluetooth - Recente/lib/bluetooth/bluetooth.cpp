@@ -28,7 +28,7 @@ float last_detection_time = 0;
 
 bool left_detected = false;
 bool right_detected = false;
-int last_controll_line = 0; // Variável para armazenar a última linha de controle detectada
+int last_controll_line = 0; 
 
 // Variáveis globais para o modo rotação
 static bool fist_rotate = false;
@@ -53,22 +53,9 @@ void setupBluetooth() {
 }
 
 void feedbackBluetooth() {
-    // Envia dados de odometria e sensores via Bluetooth
-    SerialBT.print("Odometry Position: (");
-    SerialBT.print(odometry.x_pos_);
-    SerialBT.print(", ");
-    SerialBT.print(odometry.y_pos_);
-    SerialBT.print(") Heading: ");
-    SerialBT.println(odometry.heading_);
-
-    SerialBT.print("Line Sensors - Left: ");
-    SerialBT.print(CONT_SENSOR_LINE_LEFT);
-    SerialBT.print(" | Center: ");
-    SerialBT.print(CONT_SENSOR_LINE_CENTER);
-    SerialBT.print(" | Right: ");
-    SerialBT.println(CONT_SENSOR_LINE_RIGHT);
+    // Envia dados de dos sensores via Bluetooth
+    readSensors();
 }
-
 
 int callbackBluetooth() {
     // Verifica se há um cliente conectado
@@ -93,9 +80,12 @@ int callbackBluetooth() {
             return 0; 
         } else if (recebido == 'A') {
             SerialBT.println("M-A");
-            return 2;
-        } else if (recebido == 'D') {
-            
+            return 1; // Modo andar para frente com PID lento
+        } else if (recebido == 'F') {
+            SerialBT.println("M-F");
+            return 2; // Modo andar para frente com PID rapido
+        } else if (recebido == 'G') {
+            return 4;
         } else if (recebido == 'E') {
             feedbackBluetooth();
             return 0;
@@ -121,7 +111,7 @@ switch (drive_mode)
         leftWheel.targetRpm = 0; 
         rightWheel.targetRpm = 0; 
         
-        //SerialBT.println("Diferença: "+String(last_controll_line));
+        
 
         break;
     }
@@ -129,38 +119,24 @@ switch (drive_mode)
   //Modo andar para frente com PID
     motor_actual_time = millis();
     if (motor_actual_time - motor_last_time > time_update) { // Atualiza a cada 100ms 
-      setMotorTargetRpm(60, 60);
+      setMotorTargetRpm(50, 50);
       motorSpeed(); 
-      leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
-      rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
+      
       motor_last_time = motor_actual_time;
     }}
+    leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
+    rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
     break;
   case 2: {
-  // Modo andar para frente tentando completar um deslocamento
-    bool completed = false;
-
-    if (abs(delta_distance) < odometry.x_pos_) {
-      completed = true; // Se delta_distance for negativo, consideramos que o movimento foi completado
-      leftWheel.pwm(0);
-      rightWheel.pwm(0);
-      leftWheel.targetRpm = 0;
-      rightWheel.targetRpm = 0;
-      return 0; // Não faz nada se delta_distance for zero
-    }
     if (motor_actual_time - motor_last_time > time_update) { // Atualiza a cada 500ms
-      if(!completed) {
-        setMotorTargetRpm(100, 100); // Define a velocidade alvo dos motores
-        motorSpeed();
-        leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
-        rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
-        motor_last_time = motor_actual_time;
-        Serial.println("Delta Distance: " + String(delta_distance));
-        Serial.print(" |  Odometry Position: (" + String(odometry.x_pos_) + ", " + String(odometry.y_pos_) + ")");
+      setMotorTargetRpm(100, 100); // Define a velocidade alvo dos motores
+      motorSpeed();
+      motor_last_time = motor_actual_time;
       }
+      leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup));
+      rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup));
     }
     break;
-  }
   case 3: {
     //Modo seguidor de linha  
     if(!startup_line){
@@ -198,8 +174,8 @@ switch (drive_mode)
               distance_end_position = actual_detection_position;
               float diferenca = distance_end_position - distance_start_position;            
               if(diferenca < 20 && diferenca > 5) {
-                  startup_line = false; // Reseta a variável de início de linha
-                  counting_distance = false; // Para de contar
+                  startup_line = false; 
+                  counting_distance = false;
                   return 4;  
               } else {
                   // Distância não adequada, continua e reseta para próxima medição
@@ -210,12 +186,16 @@ switch (drive_mode)
               }
           }
       }
-    }
-    if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
-      on_controll_line = false;
+    } 
+    if(CONT_SENSOR_LINE_LEFT && CONT_SENSOR_LINE_RIGHT && CONT_SENSOR_LINE_CENTER) {
+      // Está na linha de controle
       left_detected = false; // Reseta a detecção de linha esquerda
       right_detected = false; // Reseta a detecção de linha direita
       
+    } else if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
+      on_controll_line = false;
+      left_detected = false; // Reseta a detecção de linha esquerda
+      right_detected = false; // Reseta a detecção de linha direita
     } else if (CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_RIGHT) {
       on_controll_line = false;
       left_detected = true;
@@ -228,76 +208,52 @@ switch (drive_mode)
     leftWheel.targetRpm = speed;
     rightWheel.targetRpm = speed;
     if (right_detected){
-        pwm_right -= 250;
-        //rightWheel.targetRpm = speed/1.5; // Ajusta a velocidade do motor direito
+        pwm_right -= 200;
+        rightWheel.targetRpm = speed/1.5; // Ajusta a velocidade do motor direito
     }else if (left_detected){
-        pwm_left -= 250;
-        //leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
-    } else {
+        pwm_left -= 200;
+        leftWheel.targetRpm = speed/1.5;// Ajusta a velocidade do motor esquerdo
     }
-    SerialBT.print("Detecção de linha: ");
-    if (CONT_SENSOR_LINE_LEFT) {
-      SerialBT.print("Esquerda ");
-    }
-    if (CONT_SENSOR_LINE_CENTER) {
-      SerialBT.print("Centro ");
-    }
-    if (CONT_SENSOR_LINE_RIGHT) {
-      SerialBT.print("Direita ");
-    }
-    SerialBT.println(); 
-    SerialBT.print("Contador esquerdo: ");
-    SerialBT.print(leftWheel.current_position);
-    SerialBT.print(" | Contador direito: ");
-    SerialBT.println(rightWheel.current_position);
-
+    
     leftWheel.pwm(pwm_left, false);
     rightWheel.pwm(pwm_right, false);
     
-
     return 3; // Retorna 3 para indicar que o modo seguidor de linha está ativo
   }
   case 4:{
     // Modo Rotacionar no Fim - Gira até encontrar linha central
+    unsigned long rotate_actual_time = millis();   
+    int rotate_time = 1500;
+    int speed = 80; 
+
+    SerialBT.println("Modo Rotacionar iniciado");
     if (!fist_rotate){
       fist_rotate = true; // Marca que a rotação foi iniciada
       rotate_last_time = millis(); // Marca o tempo de início da rotação
-      Serial.println("Iniciando rotação...");
+      SerialBT.println("Iniciando rotação por " + String(rotate_time) + " ms");
     }
-    
-    unsigned long rotate_actual_time = millis();   
-    int rotate_time = 1500; // Tempo de rotação em milissegundos
-    int speed = 80; // Velocidade de rotação
-
     if (motor_actual_time - motor_last_time > time_update) { 
+      motorSpeed();
       leftWheel.targetRpm = speed;
       rightWheel.targetRpm = speed;
-      motorSpeed();
       motor_last_time = motor_actual_time;
     }
     if(rotate_actual_time - rotate_last_time > rotate_time) {
-      //Serial.println("Tempo de rotação atingido, verificando sensores...");
-      
+            
       if (CONT_SENSOR_LINE_CENTER && !CONT_SENSOR_LINE_LEFT && !CONT_SENSOR_LINE_RIGHT) {
-        Serial.println("Linha central encontrada! Parando rotação.");
         leftWheel.targetRpm = 0; // Para o motor esquerdo
         rightWheel.targetRpm = 0; // Para o motor direito
         leftWheel.pwm(0, false); // Para o motor esquerdo
         rightWheel.pwm(0, false); // Para o motor direito
-        Serial.println("Robô parado - linha central detectada");
-        
-        // Reset das variáveis para próxima rotação
+        SerialBT.println("Linha central detectada após rotação");
         fist_rotate = false;
         rotate_last_time = 0;
-        
         return 3; // Retorna ao modo seguir linha
       } else {
         // Continua girando
         leftWheel.pwm(static_cast<int>(leftWheel.pwmOutput+motor_startup), true);  // Esquerdo para trás
         rightWheel.pwm(static_cast<int>(rightWheel.pwmOutput+motor_startup), false); // Direito para frente
-        
-        // Reset do timer para continuar girando
-        //rotate_last_time = millis();
+      
       }
     } else {
       // Ainda dentro do tempo de rotação
@@ -315,3 +271,10 @@ switch (drive_mode)
   }
   return -1;
 }
+
+void readSensors() {
+    SerialBT.println();
+    SerialBT.println("LS - L: "+String(CONT_SENSOR_LINE_LEFT)+" | C: "+String(CONT_SENSOR_LINE_CENTER)+" | R: "+String(CONT_SENSOR_LINE_RIGHT));
+    SerialBT.println("LCL: " + String(last_controll_line) + "| L.enc: " + String(leftWheel.current_position) + "| R.enc: " + String(rightWheel.current_position));
+    SerialBT.println();
+  }

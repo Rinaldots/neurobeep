@@ -36,11 +36,3 @@ void setupSensors() {
     Serial.println("Sensors initialized with timer-based analog reading (100Hz).");
 }
 
-void readSensors() {
-    Serial.print("Line Sensors - Left: ");
-    Serial.print(CONT_SENSOR_LINE_LEFT);
-    Serial.print(" | Center: ");
-    Serial.print(CONT_SENSOR_LINE_CENTER);
-    Serial.print(" | Right: ");
-    Serial.println(CONT_SENSOR_LINE_RIGHT);
-}

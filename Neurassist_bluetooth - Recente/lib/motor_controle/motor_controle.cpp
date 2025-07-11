@@ -6,8 +6,10 @@
 
 // Definição das variáveis globais
 unsigned long motor_last_time = 0, motor_actual_time = 0;
-unsigned long odometry_last_time = 0; // Para controlar o tempo da odometria
-float delta_distance = 0.0f; // Variável para armazenar a distância percorrida
+// Defeniçao de variavei para odometria
+//unsigned long odometry_last_time = 0; 
+//float delta_distance = 0.0f; 
+
 MOTOR rightWheel(A_IA, A_IB, -1);  // -1 indica que não há pino de reversão
 MOTOR leftWheel(B_IA, B_IB, REVERSE_PIN);
 PID leftWheel_PID(&leftWheel.currentRpm, &leftWheel.pwmOutput, &leftWheel.targetRpm, 
@@ -62,31 +64,25 @@ void MOTOR::pwm(int PWM, bool reverse) {
   } else if (PWM < 0) {
     PWM = 0;
   }
-  
   if (PWM == 0) {
     // Motor parado - todos os pinos em 0
     ledcWrite(PIN_PWM_CHANNEL, 0);
     ledcWrite(PIN_A, 0);
-    if (PIN_INVERTED > 0) {
-      ledcWrite(PIN_INVERTED, 0);
+    if (PIN_INVERTED > 0) {ledcWrite(PIN_INVERTED, 0);
     }
   } else {
     // Motor ligado
     ledcWrite(PIN_PWM_CHANNEL, PWM);
-    
     if (reverse) {
       // Movimento para trás
       ledcWrite(PIN_A, 0);
-      if (PIN_INVERTED > 0) {
-        ledcWrite(PIN_INVERTED, 1023);
+      if (PIN_INVERTED > 0) {ledcWrite(PIN_INVERTED, 1023);
       }
     } else {
       // Movimento para frente
       ledcWrite(PIN_A, 1023);
-      if (PIN_INVERTED > 0) {
-        ledcWrite(PIN_INVERTED, 0);
-      }
-    }
+      if (PIN_INVERTED > 0) {ledcWrite(PIN_INVERTED, 0);
+      }}
   }
 }
 
@@ -96,13 +92,10 @@ void MOTOR::calculateCurrentRpm() {
   long current_encoder_pos = this->current_position; 
   unsigned long delta_time_ms = (current_time - previous_time);
   long delta_position = abs(current_encoder_pos - previous_position);
-  
-  // Proteção contra divisão por zero e valores muito pequenos
-  if (delta_time_ms < 10) { // Mínimo 10ms para cálculo válido
-      
+
+  if (delta_time_ms < 10) {      
       return; // Não atualiza se o tempo for muito pequeno
   }
-  
   if (delta_position > 0) {
       float calculated_rpm = (static_cast<float>(delta_position) * 60000.0f) / (ENCODER_PULSES_PER_REVOLUTION * delta_time_ms);
       
@@ -138,8 +131,8 @@ void setupMotors() {
   rightWheel_PID.SetMode(AUTOMATIC);
   leftWheel_PID.SetSampleTime(200); // Tempo de amostragem em milissegundos (aumentado para mais estabilidade)
   rightWheel_PID.SetSampleTime(200); // Tempo de amostragem em milissegundos
-  leftWheel_PID.SetOutputLimits(-motor_startup,(900-motor_startup));  // Limites menos extremos
-  rightWheel_PID.SetOutputLimits(-motor_startup, (900-motor_startup)); // Evita PWM muito baixo ou muito alto
+  leftWheel_PID.SetOutputLimits(-motor_startup,(1024-motor_startup));  // Limites menos extremos
+  rightWheel_PID.SetOutputLimits(-motor_startup, (1024-motor_startup)); // Evita PWM muito baixo ou muito alto
 }
 
 void stopMotors() {
@@ -153,7 +146,7 @@ void stopMotors() {
 void motorSpeed(){
   leftWheel.calculateCurrentRpm();
   rightWheel.calculateCurrentRpm();
-  
+  /*
   // Atualiza a odometria com os dados de ambos os motores
   unsigned long current_time = millis();
   if (odometry_last_time > time_update) {
@@ -163,12 +156,9 @@ void motorSpeed(){
     odometry.update(right_velocity, left_velocity); // Note: right first, left second
   }
   odometry_last_time = current_time;
-  
-  
+  */
   leftWheel_PID.Compute();
   rightWheel_PID.Compute();
-  
-  
   if (leftWheel.targetRpm == 0 && rightWheel.targetRpm == 0) {
     stopMotors();
   }

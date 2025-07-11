@@ -1,6 +1,7 @@
 import bluetooth
 import socket
 import time
+import threading
 
 # Função para debug e verificação do sistema
 def check_bluetooth_system():
@@ -125,6 +126,21 @@ def auto_reconnect(address, max_attempts=5, delay=3):
     print("✗ Falha na reconexão automática após todas as tentativas.")
     return None
 
+def async_receive_messages(socket_obj, stop_event):
+    """Recebe mensagens do ESP32 de forma assíncrona em thread separada"""
+    while not stop_event.is_set():
+        try:
+            socket_obj.settimeout(1.0)  # Timeout para permitir verificação do stop_event
+            data = socket_obj.recv(1024)
+            if data:
+                print("📱 Serial ESP32:", data.decode('utf-8').strip())
+        except socket.timeout:
+            continue  # Timeout normal, continua o loop
+        except Exception as e:
+            print(f"⚠ Erro ao receber dados na thread: {e}")
+            break
+    print("📨 Thread de recepção finalizada")
+
 if target_address is not None:
     print(f"✓ Tentando conectar ao dispositivo: {target_address}")
     
@@ -140,6 +156,13 @@ if target_address is not None:
             last_heartbeat = time.time()
             heartbeat_interval = 30  # Verifica conexão a cada 30 segundos
             
+            # Evento para parar a thread de recepção
+            stop_event = threading.Event()
+            
+            # Inicia a thread de recepção assíncrona
+            receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
+            receive_thread.start()
+            
             while True:
                 try:
                     # Verifica periodicamente se a conexão ainda está ativa
@@ -147,10 +170,17 @@ if target_address is not None:
                     if current_time - last_heartbeat > heartbeat_interval:
                         if not is_connection_alive(s):
                             print("⚠ Conexão perdida detectada, tentando reconectar...")
+                            # Para a thread de recepção atual
+                            stop_event.set()
+                            receive_thread.join()
                             s.close()
                             s = auto_reconnect(serverMACAddress)
                             if not s:
                                 break
+                            # Reinicia thread de recepção com nova conexão
+                            stop_event.clear()
+                            receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
+                            receive_thread.start()
                         last_heartbeat = current_time
                     
                     text = input("Digite mensagem (quit para sair, reconectar para forçar reconexão, status para verificar conexão): ")
@@ -159,41 +189,34 @@ if target_address is not None:
                         break
                     elif text.lower() == "reconectar":
                         print("🔄 Forçando reconexão...")
+                        # Para a thread de recepção atual
+                        stop_event.set()
+                        receive_thread.join()
                         s.close()
                         s = auto_reconnect(serverMACAddress)
                         if not s:
                             break
+                        # Reinicia thread de recepção com nova conexão
+                        stop_event.clear()
+                        receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
+                        receive_thread.start()
                         continue
                     elif text.lower() == "status":
                         alive = is_connection_alive(s)
                         print(f"Status da conexão: {'✓ Ativa' if alive else '✗ Inativa'}")
                         if not alive:
                             print("Tentando reconectar...")
+                            # Para a thread de recepção atual
+                            stop_event.set()
+                            receive_thread.join()
                             s.close()
                             s = auto_reconnect(serverMACAddress)
                             if not s:
                                 break
-                        continue
-                    
-                    # Limpa mensagens pendentes do ESP32
-                    print("📨 Recebendo mensagens do ESP32...")
-                    try:
-                        while True:
-                            data = s.recv(1024)
-                            if data:
-                                print("📱 Serial ESP32:", data.decode('utf-8').strip())
-                            else:
-                                break
-                    except socket.timeout:
-                        pass
-                    except Exception as e:
-                        print(f"⚠ Erro ao receber dados: {e}")
-                        # Tenta reconectar
-                        print("🔄 Tentando reconectar automaticamente...")
-                        s.close()
-                        s = auto_reconnect(serverMACAddress)
-                        if not s:
-                            break
+                            # Reinicia thread de recepção com nova conexão
+                            stop_event.clear()
+                            receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
+                            receive_thread.start()
                         continue
                     
                     # Envia mensagem
@@ -204,22 +227,18 @@ if target_address is not None:
                         print(f"⚠ Erro ao enviar: {e}")
                         # Tenta reconectar
                         print("🔄 Tentando reconectar automaticamente...")
+                        # Para a thread de recepção atual
+                        stop_event.set()
+                        receive_thread.join()
                         s.close()
                         s = auto_reconnect(serverMACAddress)
                         if not s:
                             break
+                        # Reinicia thread de recepção com nova conexão
+                        stop_event.clear()
+                        receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
+                        receive_thread.start()
                         continue
-
-                    # Tenta receber resposta
-                    try:
-                        data = s.recv(1024)
-                        if data:
-                            print("📥 Recebido:", data.decode('utf-8'))
-                    except socket.timeout:
-                        print("⏱ (sem resposta)")
-                    except Exception as e:
-                        print(f"⚠ Erro ao receber resposta: {e}")
-                        # Não reconecta aqui, pode ser só timeout normal
                         
                 except KeyboardInterrupt:
                     print("\n⚠ Interrompido pelo usuário")
@@ -227,13 +246,25 @@ if target_address is not None:
                 except Exception as e:
                     print(f"⚠ Erro geral: {e}")
                     print("🔄 Tentando reconectar automaticamente...")
+                    # Para a thread de recepção atual
+                    stop_event.set()
+                    receive_thread.join()
                     if s:
                         s.close()
                     s = auto_reconnect(serverMACAddress)
                     if not s:
                         break
+                    # Reinicia thread de recepção com nova conexão
+                    stop_event.clear()
+                    receive_thread = threading.Thread(target=async_receive_messages, args=(s, stop_event))
+                    receive_thread.start()
                     
         finally:
+            # Para a thread de recepção
+            stop_event.set()
+            if receive_thread.is_alive():
+                receive_thread.join(timeout=2)  # Espera até 2 segundos
+            
             if s:
                 try:
                     s.close()

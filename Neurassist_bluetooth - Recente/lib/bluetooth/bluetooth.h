@@ -5,5 +5,6 @@
 #include <Arduino.h>
 void setupBluetooth();
 int callbackBluetooth();
-int motorHandler(int drive_mode); // drive_mode = 0 for RPM control, drive_mode = 1 for displacement control
+int motorHandler(int drive_mode); 
+void readSensors(); 
 #endif // BLUETOOTH_H
