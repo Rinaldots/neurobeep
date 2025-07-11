@@ -226,7 +226,7 @@ switch (drive_mode)
     int rotate_time = 1500;
     int speed = 80; 
 
-    SerialBT.println("Modo Rotacionar iniciado");
+    //SerialBT.println("Modo Rotacionar iniciado");
     if (!fist_rotate){
       fist_rotate = true; // Marca que a rotação foi iniciada
       rotate_last_time = millis(); // Marca o tempo de início da rotação
