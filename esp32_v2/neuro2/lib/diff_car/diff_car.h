@@ -2,21 +2,20 @@
 #define DIFF_CAR_H
 #include <Arduino.h>
 
-#define EKF_N 5 // Position x and Angular z
-#define EKF_M 5 // 
-#define _float_t double
-
 #include "MPU9250.h"
-#include "ESP32Encoder.h"
+#include <L298NX2.h>
 #include <tinyekf.h>
+
 // QTRSensors, ESP32Encoder, MPU9250 extern declarations
 #include <QTRSensors.h>
+
 extern QTRSensors qtr;
 extern ESP32Encoder encoder_left;
 extern ESP32Encoder encoder_right;
 extern MPU9250 mpu;
-
+extern L298NX2 motors;
 // geometry_msgs from ROS2
+
 struct Point {
     float x, y, z;
 };
