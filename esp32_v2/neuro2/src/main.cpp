@@ -2,24 +2,36 @@
 #include <diff_car.h>
 
 // put function declarations here:
+
 DiffCar diffCar;
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  diffCar.setup_line_sensor(14,27,26,25,33,32,35,34,8);
+  Serial.println("Starting...");
+  //diffCar.setup_line_sensor();
+  //diffCar.setup_encoder();
+  diffCar.calibrated = true;
+  diffCar.setup_mpu();
+  diffCar.setup_h_bridge();
+  diffCar.setup_rfid();
+  diffCar.setup_line_sensor();
+  diffCar.setup_encoder();
+  diffCar.setup_timer();
+  Serial.println("Setup complete.");
+  diffCar.set_motor_speed(0, 0);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  uint16_t array[10];
-  uint16_t line_position = diffCar.line_position(array);
-  Serial.print("Sensor Values: ");
-  for (int i = 0; i < 10; i++) {
-    Serial.print(array[i]);
-    Serial.print(" ");
-  }
-  Serial.print(line_position);
-  Serial.println();
+  
+  diffCar.update_h_bridge();
+  diffCar.update_mpu();
+  diffCar.update_rfid();
+  diffCar.velocity_update();  // Safe to call here (not in ISR)
+  diffCar.debug_encoder();
+  //diffCar.debug_mpu();
+  //diffCar.update_line_position();
+  //diffCar.debug_line();
+  
 }
 

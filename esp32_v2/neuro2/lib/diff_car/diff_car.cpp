@@ -1,22 +1,17 @@
 
 #include "diff_car.h"
-#include "config.cpp"
 
 QTRSensors qtr;
-ESP32Encoder encoder_left;
-ESP32Encoder encoder_right;
 MPU9250 mpu;
-L298NX2 motors(MOTOR_EN_A, MOTOR_IN1_A, MOTOR_IN2_A, MOTOR_EN_B, MOTOR_IN1_B, MOTOR_IN2_B);
+hw_timer_t * Sensors_timer = NULL;
+
+void IRAM_ATTR sensor_timer(){
+    diffCar.update_line_position();
+      // Moved to main loop to avoid coprocessor exception in ISR
+    //Serial.println("Timer interrupt");
+}
+
 DiffCar::DiffCar() {}
-
-
-#include "odom.cpp"
-#include "encoder.cpp"
-#include "mpu.cpp"
-#include "h_bridge.cpp"
-#include "line_sensor.cpp"
-
-
 
 void DiffCar::update_kalman_filter() {
     // Leituras de sensores
@@ -27,4 +22,10 @@ void DiffCar::update_kalman_filter() {
     float accel_ang = this->mpu_accel.angular.z;        // rad/s² (IMU)
 
     float z[NOBS] = {linear_odom, angular_odom, theta_sensor};
+}
+
+void DiffCar::setup_timer() {
+    Sensors_timer = timerBegin(2000); 
+    timerAttachInterrupt(Sensors_timer, &sensor_timer);
+    timerAlarm(Sensors_timer, 1000, true, 0);
 }

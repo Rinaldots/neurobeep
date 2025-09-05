@@ -1,19 +1,33 @@
 #ifndef DIFF_CAR_H
 #define DIFF_CAR_H
-#include <Arduino.h>
 
+#include "config.cpp"
+
+#include <Arduino.h>
 #include "MPU9250.h"
-#include <L298NX2.h>
+
 #include <tinyekf.h>
+
+
+#include <MFRC522v2.h>
+#include <MFRC522DriverSPI.h>
+#include <MFRC522DriverPinSimple.h>
+#include <MFRC522Debug.h>
 
 // QTRSensors, ESP32Encoder, MPU9250 extern declarations
 #include <QTRSensors.h>
 
+
+
+#ifdef ENCODER_QUAD
+    extern ESP32Encoder encoder_left;
+    extern ESP32Encoder encoder_right;
+#endif
+
+
 extern QTRSensors qtr;
-extern ESP32Encoder encoder_left;
-extern ESP32Encoder encoder_right;
 extern MPU9250 mpu;
-extern L298NX2 motors;
+
 // geometry_msgs from ROS2
 
 struct Point {
@@ -51,45 +65,69 @@ public:
     void get_angular_position(float &roll, float &pitch, float &yaw);
 };
 
-
-
-
 class DiffCar {
 public:
     DiffCar();
-
     Diff_Odometry odometry;
-
-    bool has_encoder_hall = false;
-    bool has_encoder_velocity = false;
-    bool has_h_bridge = false;
-    bool has_imu = false;
-
-    int left_encoder_hall_pin_a = -1;
-    int left_encoder_hall_pin_b = -1;
-    int right_encoder_hall_pin_a = -1;
-    int right_encoder_hall_pin_b = -1;
+    bool calibrated = false;
 
     int left_motor_pwm = -1;
     int left_motor_dir = -1;
     int right_motor_pwm = -1;
     int right_motor_dir = -1;
 
+    unsigned long encoder_left = 0;
+    unsigned long encoder_right = 0;
+    unsigned long encoder_left_time_now = 0;
+    unsigned long encoder_left_time_last = 0;
+    unsigned long encoder_right_time_now = 0;
+    unsigned long encoder_right_time_last = 0;
+
+    float left_velocity = 0.0;
+    float right_velocity = 0.0;
+
+    float delta_time_velocity = 0;
+
+    float cache_time_velocity = 0;
+    float cache_left_pass = 0;
+    float cache_right_pass = 0;
+
+    uint16_t line_sensor_array[8];
+    uint16_t line_position_value = 0;
+    
+    String rfid_uid;
     Pose light_sensor;
     Accel mpu_accel;
-
     ekf_t ekf;
 
+    
+    
+    void setup_encoder_hall();
+    void setup_encoder();
+    void setup_h_bridge();
+    void setup_line_sensor();
+    void setup_mpu();
+    void setup_timer();
 
-    void setup_encoder_hall(int left_encoder_hall_pin_a, int left_encoder_hall_pin_b, int right_encoder_hall_pin_a, int right_encoder_hall_pin_b);
-    void setup_h_bridge(int left_motor_pwm, int left_motor_dir, int right_motor_pwm, int right_motor_dir);
-    void setup_line_sensor(int sensor_a1, int sensor_a2, int sensor_a3, int sensor_a4, int sensor_a5, int sensor_a6,int sensor_a7, int sensor_a8, int SensorCount);
+
+    void update_h_bridge();
+    void set_motor_speed(int left_motor_pwm, int right_motor_pwm);
+    
     void update_kalman_filter();
+    
     void update_mpu();
-    void update_line_sensor(uint16_t* array);
-    uint16_t line_position(uint16_t* array);
+    void debug_mpu();
+
+    void setup_rfid();
+    void update_rfid();
+
+    void update_line_position();
+    void debug_line();
+
+    void debug_encoder();
+    void velocity_update();
 };
 
-#define NOBS 5
+extern DiffCar diffCar;
 
 #endif
