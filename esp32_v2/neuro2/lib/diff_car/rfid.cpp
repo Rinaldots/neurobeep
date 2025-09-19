@@ -20,7 +20,6 @@ void DiffCar::setup_rfid(){
     MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);	// Show details of PCD - MFRC522 Card Reader details.
     Serial.println(F("Scan PICC to see UID, SAK, type, and data blocks..."));
 }
-
 void DiffCar::update_rfid(){
     if (!mfrc522.PICC_IsNewCardPresent()) {
     return;

@@ -34,15 +34,10 @@ void DiffCar::setup_line_sensor(){
     Serial.println();
     Serial.println("Line sensor setup complete.");
 }
-
-
-
-
 void DiffCar::update_line_position() {
     uint16_t line_position = qtr.readLineBlack(this -> line_sensor_array);
     this -> line_position_value = line_position;
 }
-
 void DiffCar::debug_line() {
     Serial.print("Line sensor readings: ");
     

@@ -7,8 +7,6 @@ hw_timer_t * Sensors_timer = NULL;
 
 void IRAM_ATTR sensor_timer(){
     diffCar.update_line_position();
-      // Moved to main loop to avoid coprocessor exception in ISR
-    //Serial.println("Timer interrupt");
 }
 
 DiffCar::DiffCar() {}
@@ -25,7 +23,7 @@ void DiffCar::update_kalman_filter() {
 }
 
 void DiffCar::setup_timer() {
-    Sensors_timer = timerBegin(2000); 
+    Sensors_timer = timerBegin(20000); 
     timerAttachInterrupt(Sensors_timer, &sensor_timer);
-    timerAlarm(Sensors_timer, 1000, true, 0);
+    timerAlarm(Sensors_timer, 10000, true, 0);
 }

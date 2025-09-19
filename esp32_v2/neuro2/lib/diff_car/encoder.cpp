@@ -20,79 +20,146 @@ DiffCar::callback_encoder(){
 
 #ifdef ENCODER_SIMPLE
 
-void IRAM_ATTR left_encoder_isr() {
-    diffCar.encoder_left_time_now = millis();
-    if (diffCar.encoder_left_time_now - diffCar.encoder_left_time_last > 50) {
-        diffCar.encoder_left = diffCar.encoder_left + 1;
-        diffCar.encoder_left_time_last = diffCar.encoder_left_time_now;
-    }
 
+
+
+void IRAM_ATTR left_encoder_isr() {
+  unsigned long now = micros();
+  unsigned long prev = diffCar.left_last_pulse_us;
+  // debounce por tempo mínimo entre pulsos
+  if (prev == 0 || (now - prev) > DEBOUNCE_US) {
+    diffCar.left_last_interval_us = now - prev; // 0 para primeiro pulso, trata depois
+    diffCar.left_last_pulse_us = now;
+    diffCar.encoder_left_count++;
+  }
 }
 
 void IRAM_ATTR right_encoder_isr() {
-    diffCar.encoder_right_time_now = millis();
-    if (diffCar.encoder_right_time_now - diffCar.encoder_right_time_last > 50) {
-        diffCar.encoder_right = diffCar.encoder_right + 1;
-        diffCar.encoder_right_time_last = diffCar.encoder_right_time_now;
+  unsigned long now = micros();
+  unsigned long prev = diffCar.right_last_pulse_us;
+  if (prev == 0 || (now - prev) > DEBOUNCE_US) {
+    diffCar.right_last_interval_us = now - prev;
+    diffCar.right_last_pulse_us = now;
+    diffCar.encoder_right_count++;
+  }
+}
+
+void DiffCar::setup_encoder() {
+  pinMode(ENCODER_A_1, INPUT_PULLUP);
+  pinMode(ENCODER_B_1, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_1), left_encoder_isr, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_1), right_encoder_isr, RISING);
+  last_sample_time_ms = millis();
+}
+
+// função simples para mediana de 3 (ajusta se MEDIAN_WINDOW mudar)
+unsigned long median3(unsigned long a, unsigned long b, unsigned long c) {
+  if ((a <= b && b <= c) || (c <= b && b <= a)) return b;
+  if ((b <= a && a <= c) || (c <= a && a <= b)) return a;
+  return c;
+}
+
+void DiffCar::velocity_update() {
+  unsigned long now_ms = millis();
+
+  noInterrupts();
+  unsigned long left_last_interval_us = this->left_last_interval_us;
+  unsigned long right_last_interval_us = this->right_last_interval_us;
+  interrupts();
+
+  // atualizar buffers de mediana
+  if (left_last_interval_us > 0) {
+    left_intervals[left_idx % MEDIAN_WINDOW] = left_last_interval_us;
+    left_idx++;
+  }
+  if (right_last_interval_us > 0) {
+    right_intervals[right_idx % MEDIAN_WINDOW] = right_last_interval_us;
+    right_idx++;
+  }
+
+  // pega mediana (MEDIAN_WINDOW = 3 neste exemplo)
+  unsigned long left_med = 0, right_med = 0;
+  if (left_idx >= MEDIAN_WINDOW) {
+    left_med = median3(left_intervals[0], left_intervals[1], left_intervals[2]);
+  }
+  if (right_idx >= MEDIAN_WINDOW) {
+    right_med = median3(right_intervals[0], right_intervals[1], right_intervals[2]);
+  }
+
+  float left_freq_from_interval = 0.0f;  // pulsos por segundo
+  float right_freq_from_interval = 0.0f;
+  if (left_med > 0) left_freq_from_interval = 1e6f / (float)left_med;
+  if (right_med > 0) right_freq_from_interval = 1e6f / (float)right_med;
+
+  // --- 2) Método "contagem por janela" (bom em altas velocidades)
+  if ((now_ms - last_sample_time_ms) >= SAMPLE_MS) {
+    noInterrupts();
+    long left_count_now = this->encoder_left_count;
+    long right_count_now = this->encoder_right_count;
+    interrupts();
+    unsigned long dt_ms = now_ms - last_sample_time_ms;
+    long delta_left = left_count_now - last_count_left_snapshot;
+    long delta_right = right_count_now - last_count_right_snapshot;
+    float left_freq_window = 0.0f;
+    float right_freq_window = 0.0f;
+    if (dt_ms > 0) {
+      left_freq_window = (float)delta_left / (dt_ms / 1000.0f);   // pulsos/s
+      right_freq_window = (float)delta_right / (dt_ms / 1000.0f); // pulsos/s
     }
+    float left_freq_combined = 0.0f;
+    float right_freq_combined = 0.0f;
+    if (delta_left >= 3) left_freq_combined = left_freq_window;
+    else left_freq_combined = left_freq_from_interval;
+    if (delta_right >= 3) right_freq_combined = right_freq_window;
+    else right_freq_combined = right_freq_from_interval;
+    // --- EMA (suaviza)
+    left_freq_filtered = EMA_ALPHA * left_freq_combined + (1.0f - EMA_ALPHA) * left_freq_filtered;
+    right_freq_filtered = EMA_ALPHA * right_freq_combined + (1.0f - EMA_ALPHA) * right_freq_filtered;
+    // snapshots para próxima janela
+    last_count_left_snapshot = left_count_now;
+    last_count_right_snapshot = right_count_now;
+    last_sample_time_ms = now_ms;
+  }
+  // --- Conversões úteis (ex: RPM e velocidade linear)
+  // Anti-drift: timeout sem novos pulsos
+  if ((now_ms - (this->right_last_pulse_us / 1000UL)) > NO_PULSE_TIMEOUT_MS) {
+    right_freq_filtered = 0.0f;
+    right_stopped = true;
+  } else {
+    right_stopped = false;
+  }
+  if ((now_ms - (this->left_last_pulse_us / 1000UL)) > NO_PULSE_TIMEOUT_MS) {
+    left_freq_filtered = 0.0f;
+    left_stopped = true;
+  } else {
+    left_stopped = false;
+  }
+  // Deadband para valores muito baixos (ruído)
+  if (right_freq_filtered < MIN_PULSES_PER_S) right_freq_filtered = 0.0f;
+  if (left_freq_filtered  < MIN_PULSES_PER_S) left_freq_filtered  = 0.0f;
+  float left_pulses_per_s = left_freq_filtered;
+  float right_pulses_per_s = right_freq_filtered;
+  float left_rpm = 0.0f, right_rpm = 0.0f;
+  float left_m_s = 0.0f, right_m_s = 0.0f;
+  if (pulses_per_rev > 0) {
+    left_rpm = (left_pulses_per_s / pulses_per_rev) * 60.0f;
+    right_rpm = (right_pulses_per_s / pulses_per_rev) * 60.0f;
+    left_m_s = (PI * wheel_diameter_m / pulses_per_rev) * left_pulses_per_s;
+    right_m_s = (PI * wheel_diameter_m / pulses_per_rev) * right_pulses_per_s;
+  }
+  left_velocity_ms = left_m_s;
+  right_velocity_ms = right_m_s;
+  
 }
 
-void DiffCar::setup_encoder() { 
-    attachInterrupt(digitalPinToInterrupt(ENCODER_A_1), left_encoder_isr, FALLING);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_B_1), right_encoder_isr, FALLING);
+void DiffCar::debug_encoder() {
+    Serial.print("target Left: "); Serial.print(left_velocity_target);
+    Serial.print("Left Velocity (m/s): "); Serial.print(left_velocity_ms);
+    Serial.print("| target Right: "); Serial.print(right_velocity_target);
+    Serial.print("Right Velocity (m/s): "); Serial.println(right_velocity_ms);
+
 }
 
-void DiffCar::velocity_update(){
-    
-    unsigned long current_time = millis();
-    delta_time_velocity = (float)(current_time - cache_time_velocity);
-    float delta_left_pass = (float)encoder_left - cache_left_pass;
-    float delta_right_pass = (float)encoder_right - cache_right_pass;
-    
-    if(delta_time_velocity > 50.0f && delta_left_pass > 0.0f){
-        // Check for division by zero
-        if(delta_time_velocity > 0.0f) {
-            left_velocity = delta_left_pass / delta_time_velocity;
-            cache_left_pass = (float)encoder_left;
-        } else {
-            left_velocity = 0.0f;
-        }
-    }else{
-        left_velocity = 0.0f;
-    }
-    
-    if(delta_time_velocity > 50.0f && delta_right_pass > 0.0f){
-        // Check for division by zero
-        if(delta_time_velocity > 0.0f) {
-            Serial.print("  delta");
-            Serial.print(delta_right_pass);
-            Serial.print("  time");
-            Serial.println(delta_time_velocity);
-            right_velocity = delta_right_pass / delta_time_velocity;
-            cache_right_pass = (float)encoder_right;
-        } else {
-            right_velocity = 0.0f;
-        }
-    }else{
-        right_velocity = 0.0f;
-    }
-    cache_time_velocity = current_time;
-}
-
-void DiffCar::debug_encoder(){
-    Serial.print("L Enc: ");
-    Serial.print(encoder_left);
-    Serial.print("| L Vel: ");
-    Serial.print(left_velocity);
-
-    Serial.println();
-    Serial.print("R Enc: ");
-    Serial.print(encoder_right);
-    Serial.print("| R Vel ");
-    Serial.print(right_velocity);
-
-    Serial.println();
-}
 
 
 

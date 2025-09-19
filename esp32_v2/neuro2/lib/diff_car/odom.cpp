@@ -15,19 +15,16 @@ void Diff_Odometry::update_odometry(float left_velocity, float right_velocity, f
     this->pose.position.y += distance_left * sin(this->pose.orientation.z);
     this->pose.orientation.z += delta_theta;
 }
-
 void Diff_Odometry::set_angular_position(float roll, float pitch, float yaw){
     this->pose.orientation.x = roll;
     this->pose.orientation.y = pitch;
     this->pose.orientation.z = yaw;
 }
-
 void Diff_Odometry::get_position(float &x, float &y, float &z){
     x = this->pose.position.x;
     y = this->pose.position.y;
     z = this->pose.position.z;
 }
-
 void Diff_Odometry::get_angular_position(float &roll, float &pitch, float &yaw){
     roll = this->pose.orientation.x;
     pitch = this->pose.orientation.y;

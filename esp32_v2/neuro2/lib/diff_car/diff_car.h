@@ -5,19 +5,13 @@
 
 #include <Arduino.h>
 #include "MPU9250.h"
-
 #include <tinyekf.h>
-
-
 #include <MFRC522v2.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522Debug.h>
-
-// QTRSensors, ESP32Encoder, MPU9250 extern declarations
 #include <QTRSensors.h>
-
-
+#include <QuickPID.h>
 
 #ifdef ENCODER_QUAD
     extern ESP32Encoder encoder_left;
@@ -27,7 +21,8 @@
 
 extern QTRSensors qtr;
 extern MPU9250 mpu;
-
+extern QuickPID left_pid;
+extern QuickPID right_pid;
 // geometry_msgs from ROS2
 
 struct Point {
@@ -52,6 +47,10 @@ struct Accel{
     Vector3 angular;
 };
 // geometry_msgs from ROS2
+struct MotorPwmResult {
+    float left;
+    float right;
+};
 
 class Diff_Odometry {
 public:
@@ -71,33 +70,41 @@ public:
     Diff_Odometry odometry;
     bool calibrated = false;
 
-    int left_motor_pwm = -1;
+    float left_motor_pwm = -1;
     int left_motor_dir = -1;
-    int right_motor_pwm = -1;
+    float right_motor_pwm = -1;
     int right_motor_dir = -1;
 
-    unsigned long encoder_left = 0;
-    unsigned long encoder_right = 0;
-    unsigned long encoder_left_time_now = 0;
-    unsigned long encoder_left_time_last = 0;
-    unsigned long encoder_right_time_now = 0;
-    unsigned long encoder_right_time_last = 0;
+    volatile long encoder_left_count = 0;
+    volatile long encoder_right_count = 0;
+    volatile unsigned long left_last_pulse_us = 0;
+    volatile unsigned long right_last_pulse_us = 0;
+    volatile unsigned long left_last_interval_us = 0;
+    volatile unsigned long right_last_interval_us = 0;
+    unsigned long left_intervals[MEDIAN_WINDOW] = {0};
+    unsigned long right_intervals[MEDIAN_WINDOW] = {0};
+    int left_idx = 0;
+    int right_idx = 0;
+    float left_freq_filtered = 0.0;
+    float right_freq_filtered = 0.0;
+    unsigned long last_sample_time_ms = 0;
+    long last_count_left_snapshot = 0;
+    long last_count_right_snapshot = 0;
+    float left_velocity_ms = 0.0;
+    float right_velocity_ms = 0.0;
+    float left_velocity_target = 0.0;
+    float right_velocity_target = 0.0;
+    
 
-    float left_velocity = 0.0;
-    float right_velocity = 0.0;
-
-    float delta_time_velocity = 0;
-
-    float cache_time_velocity = 0;
-    float cache_left_pass = 0;
-    float cache_right_pass = 0;
-
+    bool left_stopped = true;
+    bool right_stopped = true;
     uint16_t line_sensor_array[8];
     uint16_t line_position_value = 0;
     
     String rfid_uid;
     Pose light_sensor;
     Accel mpu_accel;
+    bool mpu_available = false; 
     ekf_t ekf;
 
     
@@ -111,8 +118,10 @@ public:
 
 
     void update_h_bridge();
-    void set_motor_speed(int left_motor_pwm, int right_motor_pwm);
-    
+    void set_motor_speed(float left_motor_pwm, float right_motor_pwm);
+    void set_motor_speed_ms(float vel_left, float vel_right);
+    void handler_motor();
+
     void update_kalman_filter();
     
     void update_mpu();
@@ -126,6 +135,9 @@ public:
 
     void debug_encoder();
     void velocity_update();
+    MotorPwmResult set_motor_speed_msr(float vel_left, float vel_right);
+    void handlercounter(unsigned long novoTempo, unsigned long *tempos);
+    
 };
 
 extern DiffCar diffCar;
