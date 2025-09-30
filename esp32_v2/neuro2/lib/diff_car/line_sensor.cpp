@@ -41,10 +41,11 @@ void DiffCar::update_line_position() {
 void DiffCar::debug_line() {
     Serial.print("Line sensor readings: ");
     
-    
     for (int i = 0; i < 8; i++) {
         Serial.print(this->line_sensor_array[i]);
         if (i < 7) Serial.print(", ");
     }
+    
+    
     Serial.println();
 }

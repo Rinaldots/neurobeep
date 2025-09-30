@@ -12,6 +12,7 @@
 #include <MFRC522Debug.h>
 #include <QTRSensors.h>
 #include <QuickPID.h>
+#include <ESP32Encoder.h>
 
 #ifdef ENCODER_QUAD
     extern ESP32Encoder encoder_left;
@@ -95,6 +96,8 @@ public:
     float left_velocity_target = 0.0;
     float right_velocity_target = 0.0;
     
+    float left_gain = 0.0;
+    float right_gain = 0.0;
 
     bool left_stopped = true;
     bool right_stopped = true;

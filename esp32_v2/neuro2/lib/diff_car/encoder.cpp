@@ -8,20 +8,59 @@ ESP32Encoder encoder_left;
 ESP32Encoder encoder_right;
 
 void DiffCar::setup_encoder(){
-    encoder_left.attachHalfQuad(ENCODER_A_1, ENCODER_A_2);
-    encoder_right.attachHalfQuad(ENCODER_B_1, ENCODER_B_2);
+    encoder_left.attachFullQuad(ENCODER_A_1, ENCODER_A_2);
+    encoder_right.attachFullQuad(ENCODER_B_1, ENCODER_B_2);
     encoder_left.setCount(0);
     encoder_right.setCount(0);
+    encoder_left.resumeCount();
+    encoder_right.resumeCount();
 }
-DiffCar::callback_encoder(){
-    return encoder_left, encoder_right.read;
+void DiffCar::debug_encoder(){
+    Serial.println("Encoder count = " + String((int32_t)encoder_left.getCount()) + " " + String((int32_t)encoder_right.getCount()));
+    //Serial.print("encoder Left: "); Serial.print(diffCar.left_velocity_ms);
+    Serial.print("Left Velocity (m/s): "); Serial.print(left_velocity_ms);
+    //Serial.print("| encoder Right: "); Serial.print(diffCar.right_velocity_ms);
+    Serial.print("Right Velocity (m/s): "); Serial.println(right_velocity_ms);
+    Serial.print("Left Motor PWM: "); Serial.print(left_motor_pwm);
+    Serial.print(" | Right Motor PWM: "); Serial.print(right_motor_pwm);
+    Serial.println();
+ }
+
+void DiffCar::velocity_update(){
+    unsigned long now_ms = millis();
+    if ((now_ms - last_sample_time_ms) >= SAMPLE_MS) {
+        int64_t left_count_now = encoder_left.getCount();
+        int64_t right_count_now = encoder_right.getCount();
+        unsigned long dt_ms = now_ms - last_sample_time_ms;
+        long delta_left = left_count_now - last_count_left_snapshot;
+        long delta_right = right_count_now - last_count_right_snapshot;
+        float left_freq_window = 0.0f;
+        float right_freq_window = 0.0f;
+        if (dt_ms > 0) {
+            left_freq_window = (float)delta_left / (dt_ms / 1000.0f);   // pulsos/s
+            right_freq_window = (float)delta_right / (dt_ms / 1000.0f); // pulsos/s
+        }
+        // --- EMA (suaviza)
+        left_freq_filtered = EMA_ALPHA * left_freq_window + (1.0f - EMA_ALPHA) * left_freq_filtered;
+        right_freq_filtered = EMA_ALPHA * right_freq_window + (1.0f - EMA_ALPHA) * right_freq_filtered;
+        // snapshots para próxima janela
+        last_count_left_snapshot = left_count_now;
+        last_count_right_snapshot = right_count_now;
+        last_sample_time_ms = now_ms;
+    }
+    // --- Conversões úteis (ex: RPM e velocidade linear)
+  
+    // converter frequência para velocidade linear
+    left_velocity_ms = (left_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
+    right_velocity_ms = (right_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
 }
+
+
 #endif
 
+
+
 #ifdef ENCODER_SIMPLE
-
-
-
 
 void IRAM_ATTR left_encoder_isr() {
   unsigned long now = micros();
@@ -153,10 +192,11 @@ void DiffCar::velocity_update() {
 }
 
 void DiffCar::debug_encoder() {
-    Serial.print("target Left: "); Serial.print(left_velocity_target);
-    Serial.print("Left Velocity (m/s): "); Serial.print(left_velocity_ms);
-    Serial.print("| target Right: "); Serial.print(right_velocity_target);
-    Serial.print("Right Velocity (m/s): "); Serial.println(right_velocity_ms);
+    Serial.print("encoder Left: "); Serial.print(diffCar.encoder_left_count);
+    //Serial.print("Left Velocity (m/s): "); Serial.print(left_velocity_ms);
+    Serial.print("| encoder Right: "); Serial.print(diffCar.encoder_right_count);
+    //Serial.print("Right Velocity (m/s): "); Serial.println(right_velocity_ms);
+    Serial.println();
 
 }
 

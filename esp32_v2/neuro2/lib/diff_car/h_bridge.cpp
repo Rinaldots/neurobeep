@@ -1,8 +1,8 @@
 // Include DiffCar class definition
 #include "diff_car.h"  
 #include <cmath>
-QuickPID left_pid(&diffCar.left_velocity_ms, &diffCar.left_motor_pwm, &diffCar.left_velocity_target);
-QuickPID right_pid(&diffCar.right_velocity_ms, &diffCar.right_motor_pwm, &diffCar.right_velocity_target);
+QuickPID left_pid(&diffCar.left_velocity_ms, &diffCar.left_gain, &diffCar.left_velocity_target);
+QuickPID right_pid(&diffCar.right_velocity_ms, &diffCar.right_gain, &diffCar.right_velocity_target);
 
 void DiffCar::setup_h_bridge(){
     pinMode(MOTOR_EN_A, OUTPUT);
@@ -153,7 +153,7 @@ void DiffCar::update_h_bridge(){
 }
 
 void DiffCar::handler_motor(){
-    MotorPwmResult temp_pwm = set_motor_speed_msr(this->left_velocity_target, this->right_velocity_target);
+    MotorPwmResult temp_pwm = set_motor_speed_msr(this->left_velocity_target*this->left_gain, this->right_velocity_target*this->right_gain);
     float temp_pwm_left = temp_pwm.left;
     float temp_pwm_right = temp_pwm.right;
     if(left_motor_pwm - temp_pwm_left > 30){

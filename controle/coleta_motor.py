@@ -21,7 +21,7 @@ class MotorDataCollector:
         # Gerar nome do arquivo automaticamente se não fornecido
         if csv_filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.csv_filename = f"dados_motor_right_{timestamp}.csv"
+            self.csv_filename = f"dados_motores_{timestamp}.csv"
         else:
             self.csv_filename = csv_filename
             
@@ -29,8 +29,8 @@ class MotorDataCollector:
         self.csv_file = None
         self.csv_writer = None
         
-        # Novo regex para formato: PWM Left: 0Left Velocity (m/s): 0.00 PWM Right: 210Right Velocity (m/s): 0.00
-        self.right_pattern = re.compile(r'PWM Right:\s*(\d+)Right Velocity \(m/s\):\s*([-\d\.]+)')
+        # Novo regex para formato: Left actual: 0.00 | Right actual: 0.00 | Left Motor PWM: 60.00 | Right Motor PWM: 60.00
+        self.data_pattern = re.compile(r'Left actual:\s*([-\d\.]+)\s*\|\s*Right actual:\s*([-\d\.]+)\s*\|\s*Left Motor PWM:\s*([-\d\.]+)\s*\|\s*Right Motor PWM:\s*([-\d\.]+)')
         
     def connect_serial(self):
         """Conecta à porta serial"""
@@ -48,31 +48,32 @@ class MotorDataCollector:
         try:
             self.csv_file = open(self.csv_filename, 'w', newline='', encoding='utf-8')
             self.csv_writer = csv.writer(self.csv_file)
-            self.csv_writer.writerow(['timestamp','datetime','pwm_right','vel_right'])
+            self.csv_writer.writerow(['timestamp','datetime','left_actual','right_actual','left_pwm','right_pwm'])
             print(f"Arquivo CSV criado: {self.csv_filename}")
             return True
         except Exception as e:
             print(f"Erro ao criar arquivo CSV: {e}")
             return False
     
-    def parse_right(self, line: str):
+    def parse_motor_data(self, line: str):
         """
-        Extrai dados do PWM Right e velocidade Right de uma linha
+        Extrai todos os dados da linha (Left actual, Right actual, Left PWM, Right PWM)
         
         Args:
             line: Linha de texto da serial
             
         Returns:
-            tuple: (pwm_right, vel_right) ou None se não encontrar dados
+            tuple: (left_actual, right_actual, left_pwm, right_pwm) ou None se não encontrar dados
         """
-        match = self.right_pattern.search(line)
+        match = self.data_pattern.search(line)
         if match:
-            return int(match.group(1)), float(match.group(2))
+            return (float(match.group(1)), float(match.group(2)), 
+                   float(match.group(3)), float(match.group(4)))
         return None
     
     def collect_data(self, duration=None):
         """
-        Coleta dados do motor Right (PWM e velocidade)
+        Coleta dados dos motores (Left/Right actual values e PWM)
         
         Args:
             duration: Duração em segundos (None = infinito)
@@ -83,7 +84,7 @@ class MotorDataCollector:
         if not self.setup_csv():
             return
             
-        print("Iniciando coleta de dados (Right motor)...")
+        print("Iniciando coleta de dados (Left/Right motors)...")
         start = time.time()
         count = 0
         
@@ -96,16 +97,16 @@ class MotorDataCollector:
                 if self.serial_conn.in_waiting:
                     line = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
                     if line:
-                        parsed = self.parse_right(line)
+                        parsed = self.parse_motor_data(line)
                         if parsed:
-                            pwm_r, vel_r = parsed
+                            left_actual, right_actual, left_pwm, right_pwm = parsed
                             now = time.time()
                             dt_str = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                            self.csv_writer.writerow([now, dt_str, pwm_r, vel_r])
+                            self.csv_writer.writerow([now, dt_str, left_actual, right_actual, left_pwm, right_pwm])
                             self.csv_file.flush()
                             count += 1
                             if count % 10 == 0:
-                                print(f"{count} | PWM_R={pwm_r} Vel_R={vel_r:.3f}")
+                                print(f"{count} | L_Act={left_actual:.2f} R_Act={right_actual:.2f} L_PWM={left_pwm:.2f} R_PWM={right_pwm:.2f}")
                 
                 time.sleep(0.01)  # Pequeno delay para não sobrecarregar CPU
                 

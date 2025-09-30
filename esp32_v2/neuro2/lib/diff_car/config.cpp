@@ -35,7 +35,7 @@ const float wheel_diameter_m = 0.065; // opcional para converter em m/s
 const unsigned long DEBOUNCE_US = 3000; // rejeita pulsos < 3 ms (ajuste)
 const unsigned long SAMPLE_MS = 100;    // janela principal de cálculo (100 ms)
 const int MEDIAN_WINDOW = 3;            // janela mediana (odd)
-const float EMA_ALPHA = 0.25;           // 0..1, maior = resposta mais rápida
+const float EMA_ALPHA = 0.9;           // 0..1, maior = resposta mais rápida
 #define ENCODER_A_1 14
 #define ENCODER_A_2 13
 #define ENCODER_B_1 11
@@ -61,6 +61,9 @@ const float EMA_ALPHA = 0.25;           // 0..1, maior = resposta mais rápida
 #define MOTOR_IN4   37
 #define MOTOR_EN_B  41
 
+#define PULSES_PER_REV 10.0f
+#define WHEEL_CIRCUMFERENCE_M 0.065f * 3.14159f
+
 #define NOBS 5
-//#define ENCODER_QUAD TRUE
-#define ENCODER_SIMPLE TRUE
+#define ENCODER_QUAD TRUE
+//#define ENCODER_SIMPLE TRUE
