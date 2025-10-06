@@ -25,8 +25,8 @@
 #define MPU_9250_SDA 8
 
 // Configurações do filtro de Kalman estendido
-#define EKF_N 5 
-#define EKF_M 5 
+#define EKF_N 3
+#define EKF_M 5
 #define _float_t double
 
 // Configurações do encoder
@@ -48,9 +48,9 @@ const float EMA_ALPHA = 0.9;           // 0..1, maior = resposta mais rápida
 #define C2 1.61248061e-02
 #define C3 -1.85446691e+00
 // Variavei PID
-#define KP 1e-1
-#define KI 1e-2
-#define KD 5e-2
+#define KP 40.0
+#define KI 40.0
+#define KD 0.5
 
 #define MIN_PULSES_PER_S 0.5   
 #define NO_PULSE_TIMEOUT_MS 100
@@ -63,6 +63,7 @@ const float EMA_ALPHA = 0.9;           // 0..1, maior = resposta mais rápida
 
 #define PULSES_PER_REV 10.0f
 #define WHEEL_CIRCUMFERENCE_M 0.065f * 3.14159f
+#define DEG_TO_RAD 0.017453292519943295f // π/180
 
 #define NOBS 5
 #define ENCODER_QUAD TRUE

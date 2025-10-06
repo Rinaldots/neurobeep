@@ -23,6 +23,10 @@ void DiffCar::debug_encoder(){
     Serial.print("Right Velocity (m/s): "); Serial.println(right_velocity_ms);
     Serial.print("Left Motor PWM: "); Serial.print(left_motor_pwm);
     Serial.print(" | Right Motor PWM: "); Serial.print(right_motor_pwm);
+    Serial.print(" | Left Gain: "); Serial.print(left_gain);
+    Serial.print(" | Right Gain: "); Serial.print(right_gain);
+    Serial.print(" | Left Target (m/s): "); Serial.print(left_velocity_target);
+    Serial.print(" | Right Target (m/s): "); Serial.print(right_velocity_target);
     Serial.println();
  }
 
@@ -40,16 +44,14 @@ void DiffCar::velocity_update(){
             left_freq_window = (float)delta_left / (dt_ms / 1000.0f);   // pulsos/s
             right_freq_window = (float)delta_right / (dt_ms / 1000.0f); // pulsos/s
         }
-        // --- EMA (suaviza)
+
         left_freq_filtered = EMA_ALPHA * left_freq_window + (1.0f - EMA_ALPHA) * left_freq_filtered;
         right_freq_filtered = EMA_ALPHA * right_freq_window + (1.0f - EMA_ALPHA) * right_freq_filtered;
-        // snapshots para próxima janela
+
         last_count_left_snapshot = left_count_now;
         last_count_right_snapshot = right_count_now;
         last_sample_time_ms = now_ms;
     }
-    // --- Conversões úteis (ex: RPM e velocidade linear)
-  
     // converter frequência para velocidade linear
     left_velocity_ms = (left_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
     right_velocity_ms = (right_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;

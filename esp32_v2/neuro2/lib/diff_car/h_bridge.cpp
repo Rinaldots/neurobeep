@@ -13,13 +13,13 @@ void DiffCar::setup_h_bridge(){
     pinMode(MOTOR_IN4, OUTPUT);
     ledcAttachChannel(MOTOR_EN_A, 30000, 8, 0);
     ledcAttachChannel(MOTOR_EN_B, 30000, 8, 1);
-    left_pid.SetOutputLimits(0, 255);
+    left_pid.SetOutputLimits(-255, 255);
     left_pid.SetSampleTimeUs(100000);
-    left_pid.SetTunings(KP, KI, KD);
+    left_pid.SetTunings(KP, KI, KD, left_pid.pMode::pOnError, left_pid.dMode::dOnMeas, left_pid.iAwMode::iAwClamp);
     left_pid.SetMode(left_pid.Control::automatic);
-    right_pid.SetOutputLimits(0, 255);
+    right_pid.SetOutputLimits(-255, 255);
     right_pid.SetSampleTimeUs(100000);
-    right_pid.SetTunings(KP, KI, KD);
+    right_pid.SetTunings(KP, KI, KD, right_pid.pMode::pOnError, right_pid.dMode::dOnMeas, right_pid.iAwMode::iAwClamp);
     right_pid.SetMode(right_pid.Control::automatic);
 }
 
@@ -35,40 +35,29 @@ static inline double model_velocity_from_pwm(double p){
 }
 
 static double pwm_from_velocity(double vel) {
-    // Proteções básicas
+    
     if (!std::isfinite(vel) || vel <= 0.0) return 0.0;
-
-    // Velocidade máxima modelada em 255
     const double vel_max = model_velocity_from_pwm(255.0);
-    if (vel >= vel_max) return 255.0; // saturação
-
-    // Intercepto agora é negativo (modelo cruzando eixo). Definir limiar mínimo prático.
-    const double MIN_EFFECTIVE_VEL = 0.05; // m/s abaixo disso considerar parado (ajuste)
+    if (vel >= vel_max) return 255.0;
+    const double MIN_EFFECTIVE_VEL = 0.05; 
     if (vel < MIN_EFFECTIVE_VEL) return 0.0;
-
-    // Resolver C1*p^2 + C2*p + (C3 - vel) = 0
     const double a = C1;
     const double b = C2;
     const double c = (C3 - vel);
-
-    if (std::fabs(a) < 1e-9) { // fallback linear
+    if (std::fabs(a) < 1e-9) { 
         double p = (vel - C3) / b;
         if (!std::isfinite(p)) return 0.0;
         if (p < 0) p = 0; else if (p > 255) p = 255;
         return p;
     }
-
     double disc = b*b - 4*a*c;
     if (disc < 0) {
-        // sem raiz real -> saturar ou zero dependendo da proximidade
-        return 0.0; // alvo abaixo da curva
+        return 0.0;
     }
     double sqrt_disc = std::sqrt(disc);
     double denom = 2*a;
     double r1 = (-b + sqrt_disc) / denom;
     double r2 = (-b - sqrt_disc) / denom;
-
-    // Escolher raiz válida (0..255) cujo modelo se aproxime de vel
     double best = -1;
     double best_err = 1e12;
     auto try_root = [&](double r){
@@ -81,22 +70,18 @@ static double pwm_from_velocity(double vel) {
     try_root(r1);
     try_root(r2);
     if (best < 0) {
-        // nenhuma raiz no intervalo -> clamp
         if (r1 >= 0 && r1 < r2) best = r1; else best = r2;
         if (best < 0) best = 0; if (best > 255) best = 255;
     }
-
     return best;
 }
 
 
 MotorPwmResult DiffCar::set_motor_speed_msr(float vel_left, float vel_right){
     MotorPwmResult result;
-    // Heurística: se valores parecem ser PWM (muito altos para m/s), avisa e converte
-    const float MAX_REASONABLE_VEL = 3.0f; // m/s (ajuste conforme necessário)
+    const float MAX_REASONABLE_VEL = 3.0f;
     if (fabs(vel_left) > MAX_REASONABLE_VEL || fabs(vel_right) > MAX_REASONABLE_VEL) {
         Serial.println("[WARN] Valores passados a set_motor_speed_ms parecem PWM. Use set_motor_speed().");
-        // Converter diretamente tratando como PWM bruto
         left_motor_pwm = (int)std::clamp(fabs(vel_left), 0.0f, 255.0f);
         right_motor_pwm = (int)std::clamp(fabs(vel_right), 0.0f, 255.0f);
         left_motor_dir = vel_left >= 0 ? 1 : 0;
@@ -142,39 +127,25 @@ void DiffCar::update_h_bridge(){
             digitalWrite(MOTOR_IN3, HIGH);
             digitalWrite(MOTOR_IN4, LOW);
             ledcWrite(MOTOR_EN_B, right_motor_pwm);
-
         } else {
             digitalWrite(MOTOR_IN3, LOW);
             digitalWrite(MOTOR_IN4, HIGH);
             ledcWrite(MOTOR_EN_B, right_motor_pwm);
-
         }
     }
 }
 
 void DiffCar::handler_motor(){
-    MotorPwmResult temp_pwm = set_motor_speed_msr(this->left_velocity_target*this->left_gain, this->right_velocity_target*this->right_gain);
-    float temp_pwm_left = temp_pwm.left;
-    float temp_pwm_right = temp_pwm.right;
-    if(left_motor_pwm - temp_pwm_left > 30){
-        set_motor_speed(temp_pwm_left, -1);
-    } else {
-        left_pid.Compute();
-    }
-    if(right_motor_pwm - temp_pwm_right > 30){
-        set_motor_speed(-1, temp_pwm_right);
-    } else {
-        right_pid.Compute();
-    }
+    MotorPwmResult temp_pwm = set_motor_speed_msr(this->left_velocity_target, this->right_velocity_target);
+    float temp_pwm_left = temp_pwm.left + temp_pwm.left * left_gain/255;
+    float temp_pwm_right = temp_pwm.right + temp_pwm.right * right_gain/255;
 
-    if(left_motor_pwm - temp_pwm_left > 30){
-        set_motor_speed(temp_pwm_left, -1);
-    } else {
-        left_pid.Compute();
-    }
-    if(right_motor_pwm - temp_pwm_right > 30){
-        set_motor_speed(-1, temp_pwm_right);
-    } else {
-        right_pid.Compute();
-    }
+
+    left_pid.Compute();
+    set_motor_speed(temp_pwm_left, -1);
+
+    right_pid.Compute();
+    set_motor_speed(-1, temp_pwm_right);
+
+    update_h_bridge();
 }

@@ -7,43 +7,43 @@ DiffCar diffCar;
 BluetoothCommunication bluetooth;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println("Starting...");
+  ekf_t ekf = {0};
   bluetooth.begin();
-  diffCar.calibrated = true;
-  diffCar.setup_mpu();
-  diffCar.setup_h_bridge();
-  diffCar.setup_rfid();
-  diffCar.setup_line_sensor();
-  diffCar.setup_encoder();
-  diffCar.setup_timer();
+  diffCar.calibrated = true; // pular calibração do sensor de linha
+
+  diffCar.setup();
   Serial.println("Setup complete.");
-  //diffCar.left_velocity_target = 0.3;
-  //diffCar.right_velocity_target = 0.3;
+  diffCar.left_velocity_target = 0.1;
+  diffCar.right_velocity_target = 0.1;
 }
 
-int pwm_atual = 170;
-long last_time = 0;
-
 void loop() {
-  long time = millis();
-  diffCar.update_h_bridge();
-  //diffCar.update_mpu();
-  //diffCar.update_rfid();
-  diffCar.velocity_update();
+  static unsigned long last_t = 0;
+  unsigned long now = micros();
+
+  if (now - last_t >= (unsigned long)(1000000 / 10)) { // 10 Hz
+    last_t = now;
+    diffCar.velocity_update();
+    diffCar.update_mpu();
+    diffCar.update_line_position();
+    diffCar.odometry.update_raw_velocity(diffCar.left_velocity_ms, diffCar.right_velocity_ms, 0.16);
+    diffCar.update_kalman_filter();
+    diffCar.odometry.update_odometry(diffCar.velocity_x_est, diffCar.velocity_y_est, diffCar.angular_velocity_est, 0.16);
+    //diffCar.debug_mpu();
+    diffCar.debug_encoder();
+    //diffCar.odometry.debug();
+    diffCar.reset_kalman_filter();
+    diffCar.handler_motor();
+  }
+
+  
+  //diffCar.update_h_bridge();
+  diffCar.update_rfid();
+  //diffCar.debug_line();
   //diffCar.handler_motor();
   //diffCar.debug_encoder();
   //diffCar.debug_line();
-  Serial.print("Left actual: " + String(diffCar.left_velocity_ms) + " | Right actual: " + String(diffCar.right_velocity_ms));
-  Serial.print(" | Left Motor PWM: "); Serial.print(diffCar.left_motor_pwm); Serial.print(" | Right Motor PWM: "); Serial.print(diffCar.right_motor_pwm);
-  Serial.println();
-  if(time - last_time > 5000){
-    last_time = time;
-    pwm_atual += 5;
-    diffCar.left_motor_pwm = pwm_atual;
-    diffCar.right_motor_pwm = pwm_atual;
-    if(pwm_atual > 255) pwm_atual = 0;
-  }
 }
 

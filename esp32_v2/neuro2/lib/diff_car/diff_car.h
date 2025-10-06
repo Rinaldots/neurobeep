@@ -56,13 +56,16 @@ struct MotorPwmResult {
 class Diff_Odometry {
 public:
     unsigned long last_update;
-    Pose current_pose;
+    unsigned long last_update_raw;
+    Pose pose_raw;
+    Twist vel_raw;
     Pose pose;
     Twist vel;
-    void update_odometry(float left_velocity, float right_velocity, float wheel_base);
+    void update_odometry(float v_x_est, float v_y_est, float w_est, float wheel_base);
     void set_angular_position(float roll, float pitch, float yaw);
-    void get_position(float &x, float &y, float &z);
-    void get_angular_position(float &roll, float &pitch, float &yaw);
+    void set_position(float x, float y, float z);
+    void debug();
+    void update_raw_velocity(float left_velocity, float right_velocity, float wheel_base);
 };
 
 class DiffCar {
@@ -78,6 +81,8 @@ public:
 
     volatile long encoder_left_count = 0;
     volatile long encoder_right_count = 0;
+
+    #ifdef ENCODER_SIMPLE
     volatile unsigned long left_last_pulse_us = 0;
     volatile unsigned long right_last_pulse_us = 0;
     volatile unsigned long left_last_interval_us = 0;
@@ -91,11 +96,28 @@ public:
     unsigned long last_sample_time_ms = 0;
     long last_count_left_snapshot = 0;
     long last_count_right_snapshot = 0;
+    #endif
+
+    #ifdef ENCODER_QUAD
+    float left_freq_filtered = 0.0;
+    float right_freq_filtered = 0.0;
+    unsigned long last_sample_time_ms = 0;
+    long last_count_left_snapshot = 0;
+    long last_count_right_snapshot = 0;
+    #endif
+
+    // Velocidade em m/s
     float left_velocity_ms = 0.0;
     float right_velocity_ms = 0.0;
+    float velocity_x_est = 0.0;
+    float velocity_y_est = 0.0;
+    float angular_velocity_est = 0.0;
+
+    // Velocidade alvo em m/s
     float left_velocity_target = 0.0;
     float right_velocity_target = 0.0;
-    
+
+    // Ganhos do PID
     float left_gain = 0.0;
     float right_gain = 0.0;
 
@@ -103,6 +125,7 @@ public:
     bool right_stopped = true;
     uint16_t line_sensor_array[8];
     uint16_t line_position_value = 0;
+    int16_t line_distance_mm = 0;  // Distância da linha do centro em mm (inteiro)
     
     String rfid_uid;
     Pose light_sensor;
@@ -110,37 +133,62 @@ public:
     bool mpu_available = false; 
     ekf_t ekf;
 
-    
-    
+    void setup();
+
+    // Setup functions
     void setup_encoder_hall();
     void setup_encoder();
     void setup_h_bridge();
     void setup_line_sensor();
     void setup_mpu();
-    void setup_timer();
+    void setup_gps();
+    void setup_rfid();
 
-
+    // H-Bridge functions
     void update_h_bridge();
     void set_motor_speed(float left_motor_pwm, float right_motor_pwm);
     void set_motor_speed_ms(float vel_left, float vel_right);
     void handler_motor();
 
-    void update_kalman_filter();
-    
+    // IMU functions
     void update_mpu();
     void debug_mpu();
+    void correct_imu();    // Correção da transformação IMU -> odom
+    void calibrate_imu();  // Calibração do IMU
+    void calibrate_gyro(uint8_t loops);  // Calibração específica do giroscópio
+    void calibrate_accel(uint8_t loops); // Calibração específica do acelerômetro
+    void pid_calibration(uint8_t readAddress, float kP, float kI, uint8_t loops); // Algoritmo PID de calibração
 
-    void setup_rfid();
+    // RFID functions
     void update_rfid();
 
+    // Line sensor functions
     void update_line_position();
     void debug_line();
+    int16_t line_dist_center_mm();  // Versão inteira, mais leve
 
+    // GPS functions
+    void displayInfo();
+    void loop_gps();
+
+    // Encoder functions
     void debug_encoder();
     void velocity_update();
     MotorPwmResult set_motor_speed_msr(float vel_left, float vel_right);
-    void handlercounter(unsigned long novoTempo, unsigned long *tempos);
-    
+
+    // Kalman filter functions
+    void update_kalman_filter();
+    void init_kf(ekf_t *ekf);
+    void run_model(
+        ekf_t *ekf,
+        double accel_lin, double accel_ang,
+        double fx[EKF_N],
+        double F[EKF_N*EKF_N],
+        double hx[EKF_M],
+        double H[EKF_M*EKF_N]
+    );
+    void reset_kalman_filter();
+
 };
 
 extern DiffCar diffCar;

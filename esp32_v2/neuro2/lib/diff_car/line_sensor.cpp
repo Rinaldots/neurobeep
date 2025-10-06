@@ -1,4 +1,5 @@
 #include "diff_car.h"
+#include <cmath>
 
 
 
@@ -22,8 +23,6 @@ void DiffCar::setup_line_sensor(){
             Serial.print(' ');
         }
         Serial.println();
-
-        // print the calibration maximum values measured when emitters were on
         for (uint8_t i = 0; i < 8; i++)
         {
             Serial.print(qtr.calibrationOn.maximum[i]);
@@ -34,18 +33,38 @@ void DiffCar::setup_line_sensor(){
     Serial.println();
     Serial.println("Line sensor setup complete.");
 }
+
+int16_t DiffCar::line_dist_center_mm() {
+    float line_position = (float)this->line_position_value / 1000.0f;
+    return (int16_t)(line_position* 100.0f - 350.0f);  // Converter para mm e centralizar em zero
+}
+
+
 void DiffCar::update_line_position() {
     uint16_t line_position = qtr.readLineBlack(this -> line_sensor_array);
-    this -> line_position_value = line_position;
+    int16_t xcentro_mm = line_dist_center_mm();  // Usar versão inteira
+    
+    this->line_distance_mm = xcentro_mm;
+    
+    this->light_sensor.orientation.z = atan2(xcentro_mm, 15000);
+    
+    this->line_position_value = line_position;
 }
+
 void DiffCar::debug_line() {
     Serial.print("Line sensor readings: ");
     
     for (int i = 0; i < 8; i++) {
-        Serial.print(this->line_sensor_array[i]);
+        Serial.print(this->line_sensor_array[i],4);
         if (i < 7) Serial.print(", ");
     }
     
+    Serial.print(" | Position: ");
+    Serial.print(this->line_position_value);
+    Serial.print(" | Dist from center (mm): ");
+    Serial.print(this->line_distance_mm); 
+    Serial.print(" | Angle (rad): ");
+    Serial.print(this->light_sensor.orientation.z);
     
     Serial.println();
 }
