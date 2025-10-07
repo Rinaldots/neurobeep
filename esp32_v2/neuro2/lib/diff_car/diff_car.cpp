@@ -112,3 +112,65 @@ void DiffCar::setup() {
   setup_gps();
   init_kf(&ekf);
 }
+
+// Função para enviar dados de telemetria via Bluetooth
+String DiffCar::get_telemetry_data() {
+    String data = "";
+    
+    // Dados dos encoders
+    data += "ENC_L:" + String(encoder_left_count) + ",";
+    data += "ENC_R:" + String(encoder_right_count) + ",";
+    
+    // Velocidades atuais
+    data += "VEL_L:" + String(left_velocity_ms, 3) + ",";
+    data += "VEL_R:" + String(right_velocity_ms, 3) + ",";
+    
+    // Velocidades alvo
+    data += "TGT_L:" + String(left_velocity_target, 3) + ",";
+    data += "TGT_R:" + String(right_velocity_target, 3) + ",";
+    
+    // Ganhos PID
+    data += "GAIN_L:" + String(left_gain, 2) + ",";
+    data += "GAIN_R:" + String(right_gain, 2) + ",";
+    
+    // PWM dos motores
+    data += "PWM_L:" + String(left_motor_pwm, 1) + ",";
+    data += "PWM_R:" + String(right_motor_pwm, 1) + ",";
+    
+    // Odometria (do filtro de Kalman)
+    data += "ODOM_X:" + String(odometry.pose.position.x, 3) + ",";
+    data += "ODOM_Y:" + String(odometry.pose.position.y, 3) + ",";
+    data += "ODOM_TH:" + String(odometry.pose.orientation.z, 3) + ",";
+    data += "ODOM_VX:" + String(odometry.vel.linear.x, 3) + ",";
+    data += "ODOM_VY:" + String(odometry.vel.linear.y, 3) + ",";
+    data += "ODOM_W:" + String(odometry.vel.angular.z, 3) + ",";
+    
+    // Estados estimados do Kalman
+    data += "EKF_VX:" + String(ekf.x[0], 3) + ",";
+    data += "EKF_VY:" + String(ekf.x[1], 3) + ",";
+    data += "EKF_W:" + String(ekf.x[2], 3) + ",";
+    
+    // Sensor de linha
+    data += "LINE_POS:" + String(line_position_value) + ",";
+    data += "LINE_DIST:" + String(line_distance_mm) + ",";
+    
+    // IMU
+    data += "IMU_AX:" + String(mpu_accel.linear.x, 3) + ",";
+    data += "IMU_AY:" + String(mpu_accel.linear.y, 3) + ",";
+    data += "IMU_AZ:" + String(mpu_accel.linear.z, 3) + ",";
+    data += "IMU_GX:" + String(mpu_accel.angular.x, 3) + ",";
+    data += "IMU_GY:" + String(mpu_accel.angular.y, 3) + ",";
+    data += "IMU_GZ:" + String(mpu_accel.angular.z, 3) + ",";
+    
+    // RFID
+    data += "RFID:" + rfid_uid + ",";
+    
+    // GPS
+    data += "GPS_LAT:" + String(gps_latitude, 6) + ",";
+    data += "GPS_LNG:" + String(gps_longitude, 6) + ",";
+    data += "GPS_ALT:" + String(gps_altitude, 1) + ",";
+    data += "GPS_SPD:" + String(gps_speed, 2) + ",";
+    data += "GPS_VAL:" + String(gps_valid ? 1 : 0);
+    
+    return data;
+}

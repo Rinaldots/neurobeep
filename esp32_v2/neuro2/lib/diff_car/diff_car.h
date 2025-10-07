@@ -133,6 +133,13 @@ public:
     bool mpu_available = false; 
     ekf_t ekf;
 
+    // GPS data
+    float gps_latitude = 0.0;
+    float gps_longitude = 0.0;
+    float gps_altitude = 0.0;
+    float gps_speed = 0.0;
+    bool gps_valid = false;
+
     void setup();
 
     // Setup functions
@@ -188,6 +195,9 @@ public:
         double H[EKF_M*EKF_N]
     );
     void reset_kalman_filter();
+
+    // Bluetooth data transmission
+    String get_telemetry_data();
 
 };
 

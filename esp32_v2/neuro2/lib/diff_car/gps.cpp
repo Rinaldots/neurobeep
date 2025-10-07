@@ -41,13 +41,31 @@ void DiffCar::displayInfo()
   Serial.print(F("Location: ")); 
   if (gps.location.isValid())
   {
+    // Salvar dados GPS nas variáveis da classe
+    gps_latitude = gps.location.lat();
+    gps_longitude = gps.location.lng();
+    gps_valid = true;
+    
     Serial.print(gps.location.lat(), 6);
     Serial.print(F(","));
     Serial.print(gps.location.lng(), 6);
   }
   else
   {
+    gps_valid = false;
     Serial.print(F("INVALID"));
+  }
+
+  // Salvar altitude se disponível
+  if (gps.altitude.isValid())
+  {
+    gps_altitude = gps.altitude.meters();
+  }
+  
+  // Salvar velocidade se disponível
+  if (gps.speed.isValid())
+  {
+    gps_speed = gps.speed.kmph();
   }
 
   // Add satellite information for debugging
