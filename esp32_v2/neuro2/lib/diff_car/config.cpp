@@ -48,9 +48,15 @@ const float EMA_ALPHA = 0.9;           // 0..1, maior = resposta mais rápida
 #define C2 1.61248061e-02
 #define C3 -1.85446691e+00
 // Variavei PID
-#define KP 40.0
-#define KI 40.0
-#define KD 0.5
+#define KP 0.5
+#define KI 20.0
+#define KD 10.0
+// Variavei PID seguir linha
+#define KP_l 0.0  
+#define KI_l 35.0
+#define KD_l 35.0
+
+
 
 #define MIN_PULSES_PER_S 0.5   
 #define NO_PULSE_TIMEOUT_MS 100
@@ -63,7 +69,6 @@ const float EMA_ALPHA = 0.9;           // 0..1, maior = resposta mais rápida
 
 #define PULSES_PER_REV 10.0f
 #define WHEEL_CIRCUMFERENCE_M 0.065f * 3.14159f
-#define DEG_TO_RAD 0.017453292519943295f // π/180
 
 #define NOBS 5
 #define ENCODER_QUAD TRUE

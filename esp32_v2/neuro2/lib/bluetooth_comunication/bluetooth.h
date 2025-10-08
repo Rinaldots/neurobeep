@@ -5,9 +5,10 @@
 #include "BLEServer.h"
 #include "BLEUtils.h"
 #include "BLE2902.h"
+#include <string>
 
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define SERVICE_UUID        "8f3b6fcf-6d12-437f-8b68-9a3494fbe656"
+#define CHARACTERISTIC_UUID "d5593e6b-3328-493a-b3c9-9814683d8e40"
 
 // Variáveis globais para callback
 bool deviceConnected = false;
@@ -28,10 +29,10 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-        String rxValue = pCharacteristic->getValue();
+        std::string rx = pCharacteristic->getValue();
+        String rxValue = String(rx.c_str());
         if (rxValue.length() > 0) {
             receivedData = rxValue;
-            Serial.println("Dados recebidos via BLE: " + receivedData);
         }
     }
 };
@@ -48,9 +49,9 @@ public:
     String receiveData();
     void processCommand(String command);
     bool connected = false;
-    String device_name = "ESP32test";
+    String device_name = "Neuro_Robot";
     void connect_status();
-    void handler(String data);
+    void handler();
 };
 
 void BluetoothCommunication::begin() {
@@ -92,25 +93,26 @@ void BluetoothCommunication::sendData(const char* data) {
     }
 }
 
-void BluetoothCommunication::handler(String data) {
-    if (data.startsWith("CMD:")) {
-        String command = data.substring(4);
-        Serial.println("Comando recebido: " + command);
-        processCommand(command);
-        // Processar o comando conforme necessário
-    }  else if(data.startsWith("RQS:")) {
-        String telemetryData = diffCar.get_telemetry_data();
-        bluetooth.sendData(telemetryData.c_str());
+void BluetoothCommunication::handler() {
+    connect_status();
+    String bleData = receiveData();
+    if (bleData.length() > 0) {
+        if (bleData.startsWith("CMD:")) {
+            String command = bleData.substring(4);
+            Serial.println("Comando recebido: " + command);
+            processCommand(command);
+            // Processar o comando conforme necessário
+        }  else if(bleData.startsWith("RQS")) {
+            String telemetryData = diffCar.get_telemetry_data();
+            sendData(telemetryData.c_str());
+        }
     }
 }
 
 String BluetoothCommunication::receiveData() {
-    if (connected && !receivedData.isEmpty()) {
-        String temp = receivedData;
-        receivedData = "";
-        return temp;
-    }
-    return "";
+    String temp = receivedData;
+    receivedData = "";
+    return temp;
 }
 
 void BluetoothCommunication::processCommand(String command) {
@@ -121,35 +123,6 @@ void BluetoothCommunication::processCommand(String command) {
         Serial.println("Comando: Iniciar movimento");
         // Inicia o carrinho W.I.P
     }
-    else if (command == "PARAR") {
-        Serial.println("Comando: Parar movimento");
-        diffCar.left_velocity_target = 0.0;
-        diffCar.right_velocity_target = 0.0;
-    }
-    else if (command == "FRENTE") {
-        Serial.println("Comando: Mover para frente");
-        diffCar.left_motor_dir = 1;
-        diffCar.right_motor_dir = 1;
-        diffCar.left_velocity_target = 0.2;
-        diffCar.right_velocity_target = 0.2;
-    }
-    else if (command == "TRAS") {
-        Serial.println("Comando: Mover para trás");
-        diffCar.left_motor_dir = -1;
-        diffCar.right_motor_dir = -1;
-        diffCar.left_velocity_target = 0.2;
-        diffCar.right_velocity_target = 0.2;
-    }
-    else if (command == "ESQUERDA") {
-        Serial.println("Comando: Virar à esquerda");
-        diffCar.left_velocity_target = 0.1;
-        diffCar.right_velocity_target = 0.2;
-    }
-    else if (command == "DIREITA") {
-        Serial.println("Comando: Virar à direita");
-        diffCar.left_velocity_target = 0.2;
-        diffCar.right_velocity_target = 0.1;
-    }
     else if (command == "RESET_KALMAN") {
         Serial.println("Comando: Reset Filtro de Kalman");
         diffCar.reset_kalman_filter();
@@ -159,18 +132,12 @@ void BluetoothCommunication::processCommand(String command) {
         diffCar.calibrate_imu();
     }
     else if (command.startsWith("VEL:")) {
-        // Comando para definir velocidade: VEL:0.5
-        float velocity = command.substring(4).toFloat();
-        Serial.println("Comando: Definir velocidade " + String(velocity));
-        if (velocity < 0.0) {
-            diffCar.left_motor_dir = -1;
-            diffCar.right_motor_dir = -1;
-        } else {
-            diffCar.left_motor_dir = 1;
-            diffCar.right_motor_dir = 1;
-        }
-        diffCar.left_velocity_target = velocity;
-        diffCar.right_velocity_target = velocity;
+        // Comando para definir velocidade: VEL:0.50 0.50 (esquerda direita)
+        float left_velocity = command.substring(4, command.indexOf(' ', 4)).toFloat();
+        float right_velocity = command.substring(command.indexOf(' ', 4) + 1).toFloat();
+        Serial.println("Comando: Definir velocidade esquerda " + String(left_velocity) + ", direita " + String(right_velocity));
+        diffCar.left_velocity_target = left_velocity;
+        diffCar.right_velocity_target = right_velocity;
     }
     else if (command.startsWith("TURN:")) {
         // Comando para virar: TURN:-0.5 (negativo = esquerda, positivo = direita)

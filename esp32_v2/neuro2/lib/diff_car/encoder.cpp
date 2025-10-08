@@ -32,6 +32,8 @@ void DiffCar::debug_encoder(){
 
 void DiffCar::velocity_update(){
     unsigned long now_ms = millis();
+    encoder_left_count = encoder_left.getCount();
+    encoder_right_count = encoder_right.getCount();
     if ((now_ms - last_sample_time_ms) >= SAMPLE_MS) {
         int64_t left_count_now = encoder_left.getCount();
         int64_t right_count_now = encoder_right.getCount();

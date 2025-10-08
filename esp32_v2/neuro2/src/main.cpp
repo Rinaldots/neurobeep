@@ -15,8 +15,6 @@ void setup() {
 
   diffCar.setup();
   Serial.println("Setup complete.");
-  diffCar.left_velocity_target = 0.0;
-  diffCar.right_velocity_target = 0.0;
 }
 
 void loop() {
@@ -32,15 +30,14 @@ void loop() {
     diffCar.update_kalman_filter();
     diffCar.odometry.update_odometry(diffCar.velocity_x_est, diffCar.velocity_y_est, diffCar.angular_velocity_est, 0.16);
     //diffCar.debug_mpu();
-    diffCar.debug_encoder();
+    //diffCar.debug_encoder();
     //diffCar.odometry.debug();
     diffCar.reset_kalman_filter();
     diffCar.handler_motor();
+    diffCar.update_rfid();
   }
-
-  
-  //diffCar.update_h_bridge();
-  diffCar.update_rfid();
+  bluetooth.handler();
+  //diffCr.update_h_bridge();
   //diffCar.debug_line();
   //diffCar.handler_motor();
   //diffCar.debug_encoder();

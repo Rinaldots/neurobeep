@@ -1,8 +1,8 @@
 // Include DiffCar class definition
 #include "diff_car.h"  
 #include <cmath>
-QuickPID left_pid(&diffCar.left_velocity_ms, &diffCar.left_gain, &diffCar.left_velocity_target);
-QuickPID right_pid(&diffCar.right_velocity_ms, &diffCar.right_gain, &diffCar.right_velocity_target);
+QuickPID left_pid(&diffCar.left_velocity_ms_abs, &diffCar.left_gain, &diffCar.left_velocity_target_abs);
+QuickPID right_pid(&diffCar.right_velocity_ms_abs, &diffCar.right_gain, &diffCar.right_velocity_target_abs);
 
 void DiffCar::setup_h_bridge(){
     pinMode(MOTOR_EN_A, OUTPUT);
@@ -11,8 +11,12 @@ void DiffCar::setup_h_bridge(){
     pinMode(MOTOR_IN2, OUTPUT);
     pinMode(MOTOR_IN3, OUTPUT);
     pinMode(MOTOR_IN4, OUTPUT);
-    ledcAttachChannel(MOTOR_EN_A, 30000, 8, 0);
-    ledcAttachChannel(MOTOR_EN_B, 30000, 8, 1);
+    ledcSetup(0, 30000, 8);
+    ledcAttachPin(MOTOR_EN_A, 0);
+
+    // Configura canal B
+    ledcSetup(1, 30000, 8);
+    ledcAttachPin(MOTOR_EN_B, 1);
     left_pid.SetOutputLimits(-255, 255);
     left_pid.SetSampleTimeUs(100000);
     left_pid.SetTunings(KP, KI, KD, left_pid.pMode::pOnError, left_pid.dMode::dOnMeas, left_pid.iAwMode::iAwClamp);
@@ -23,11 +27,9 @@ void DiffCar::setup_h_bridge(){
     right_pid.SetMode(right_pid.Control::automatic);
 }
 
-void DiffCar::set_motor_speed(float left_motor_pwm_in, float right_motor_pwm_in){
-    left_motor_dir = 1;
-    right_motor_dir = 1; 
-    if (left_motor_pwm_in < 255 && left_motor_pwm_in > 0) left_motor_pwm = abs(left_motor_pwm_in);
-    if (right_motor_pwm_in < 255 && right_motor_pwm_in > 0) right_motor_pwm = abs(right_motor_pwm_in);
+void DiffCar::set_motor_speed(float left_motor_pwm_in, float right_motor_pwm_in){ 
+    left_motor_pwm = constrain(fabs(left_motor_pwm_in), 0.0f, 255.0f);
+    right_motor_pwm = constrain(fabs(right_motor_pwm_in), 0.0f, 255.0f);
 }
 
 static inline double model_velocity_from_pwm(double p){
@@ -82,16 +84,16 @@ MotorPwmResult DiffCar::set_motor_speed_msr(float vel_left, float vel_right){
     const float MAX_REASONABLE_VEL = 3.0f;
     if (fabs(vel_left) > MAX_REASONABLE_VEL || fabs(vel_right) > MAX_REASONABLE_VEL) {
         Serial.println("[WARN] Valores passados a set_motor_speed_ms parecem PWM. Use set_motor_speed().");
-        left_motor_pwm = (int)std::clamp(fabs(vel_left), 0.0f, 255.0f);
-        right_motor_pwm = (int)std::clamp(fabs(vel_right), 0.0f, 255.0f);
+        left_motor_pwm = constrain(fabs(vel_left), 0.0f, 255.0f);
+        right_motor_pwm = constrain(fabs(vel_right), 0.0f, 255.0f);
         left_motor_dir = vel_left >= 0 ? 1 : 0;
         right_motor_dir = vel_right >= 0 ? 1 : 0;
         result.left = left_motor_pwm;
         result.right = right_motor_pwm;
         return result;
     }
-    double p_left = pwm_from_velocity(vel_left);
-    double p_right = pwm_from_velocity(vel_right);
+    double p_left = pwm_from_velocity(fabs(vel_left));
+    double p_right = pwm_from_velocity(fabs(vel_right));
     if (!std::isfinite(p_left)) p_left = 0; if (!std::isfinite(p_right)) p_right = 0;
     if (p_left < 0) p_left = 0; else if (p_left > 255) p_left = 255;
     if (p_right < 0) p_right = 0; else if (p_right > 255) p_right = 255;
@@ -110,28 +112,32 @@ void DiffCar::update_h_bridge(){
         if (left_motor_dir) {
             digitalWrite(MOTOR_IN1, HIGH);
             digitalWrite(MOTOR_IN2, LOW);
-            ledcWrite(MOTOR_EN_A, left_motor_pwm);
+            ledcWrite(0, left_motor_pwm);
         } else {
             digitalWrite(MOTOR_IN1, LOW);
             digitalWrite(MOTOR_IN2, HIGH);
-            ledcWrite(MOTOR_EN_A, left_motor_pwm);
+            ledcWrite(0, left_motor_pwm);
         }
     } else {
         digitalWrite(MOTOR_IN1, LOW);
         digitalWrite(MOTOR_IN2, LOW);
-        ledcWrite(MOTOR_EN_A, 0);
+        ledcWrite(0, 0);
     }
 
     if(right_motor_pwm != 0){
         if (right_motor_dir) {
             digitalWrite(MOTOR_IN3, HIGH);
             digitalWrite(MOTOR_IN4, LOW);
-            ledcWrite(MOTOR_EN_B, right_motor_pwm);
+            ledcWrite(1, right_motor_pwm);
         } else {
             digitalWrite(MOTOR_IN3, LOW);
             digitalWrite(MOTOR_IN4, HIGH);
-            ledcWrite(MOTOR_EN_B, right_motor_pwm);
+            ledcWrite(1, right_motor_pwm);
         }
+    } else {
+        digitalWrite(MOTOR_IN3, LOW);
+        digitalWrite(MOTOR_IN4, LOW);
+        ledcWrite(1, 0);
     }
 }
 
@@ -139,13 +145,16 @@ void DiffCar::handler_motor(){
     MotorPwmResult temp_pwm = set_motor_speed_msr(this->left_velocity_target, this->right_velocity_target);
     float temp_pwm_left = temp_pwm.left + temp_pwm.left * left_gain/255;
     float temp_pwm_right = temp_pwm.right + temp_pwm.right * right_gain/255;
-
+    left_velocity_target_abs = fabs(this->left_velocity_target);
+    right_velocity_target_abs = fabs(this->right_velocity_target);
+    left_velocity_ms_abs = fabs(this->left_velocity_ms);
+    right_velocity_ms_abs = fabs(this->right_velocity_ms);
 
     left_pid.Compute();
-    set_motor_speed(temp_pwm_left, -1);
-
     right_pid.Compute();
-    set_motor_speed(-1, temp_pwm_right);
+    
+    // Define o PWM de ambos os motores corretamente
+    set_motor_speed(temp_pwm_left, temp_pwm_right);
 
     update_h_bridge();
 }

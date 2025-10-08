@@ -109,6 +109,8 @@ public:
     // Velocidade em m/s
     float left_velocity_ms = 0.0;
     float right_velocity_ms = 0.0;
+    float left_velocity_ms_abs = 0.0;
+    float right_velocity_ms_abs = 0.0;
     float velocity_x_est = 0.0;
     float velocity_y_est = 0.0;
     float angular_velocity_est = 0.0;
@@ -116,6 +118,8 @@ public:
     // Velocidade alvo em m/s
     float left_velocity_target = 0.0;
     float right_velocity_target = 0.0;
+    float left_velocity_target_abs = 0.0;
+    float right_velocity_target_abs = 0.0;
 
     // Ganhos do PID
     float left_gain = 0.0;
