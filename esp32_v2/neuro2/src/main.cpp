@@ -15,8 +15,8 @@ void setup() {
 
   diffCar.setup();
   Serial.println("Setup complete.");
-  diffCar.left_velocity_target = 0.1;
-  diffCar.right_velocity_target = 0.1;
+  diffCar.left_velocity_target = 0.0;
+  diffCar.right_velocity_target = 0.0;
 }
 
 void loop() {
