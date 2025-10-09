@@ -73,6 +73,7 @@ void loop() {
 		#if ENABLE_TIMING
 			d_line = micros() - t_prev; t_prev = micros();
 		#endif
+		
 		// 4) raw velocity -> odometry helper
 		diffCar.odometry.update_raw_velocity(diffCar.left_velocity_ms, diffCar.right_velocity_ms, 0.16);
 		#if ENABLE_TIMING

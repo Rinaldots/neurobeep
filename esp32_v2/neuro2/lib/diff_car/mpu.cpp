@@ -30,9 +30,9 @@ void DiffCar::setup_mpu() {
     setting.mag_output_bits = MAG_OUTPUT_BITS::M16BITS;
     setting.fifo_sample_rate = FIFO_SAMPLE_RATE::SMPL_200HZ;
     setting.gyro_fchoice = 0x03;
-    setting.gyro_dlpf_cfg = GYRO_DLPF_CFG::DLPF_41HZ;
+    setting.gyro_dlpf_cfg = GYRO_DLPF_CFG::DLPF_184HZ;
     setting.accel_fchoice = 0x01;
-    setting.accel_dlpf_cfg = ACCEL_DLPF_CFG::DLPF_45HZ;
+    setting.accel_dlpf_cfg = ACCEL_DLPF_CFG::DLPF_218HZ_0;
 
      if (!mpu.setup(error == 0 ? 0x68 : 0x69, setting)) {
         Serial.println("Falha na configuração do MPU. Continuando sem MPU...");
@@ -52,7 +52,11 @@ void DiffCar::correct_imu()
     float gyro_x_raw = mpu.getGyroX();
     float gyro_y_raw = mpu.getGyroY();
     float gyro_z_raw = mpu.getGyroZ();
-    
+
+    float mag_x_raw = mpu.getMagX();  
+    float mag_y_raw = mpu.getMagY();
+    float mag_z_raw = mpu.getMagZ();
+        
     
     gyro_x_raw *= DEG_TO_RAD;
     gyro_y_raw *= DEG_TO_RAD;
@@ -68,7 +72,9 @@ void DiffCar::correct_imu()
     this->mpu_accel.angular.y = gyro_x_raw;  // y_odom = x_imu  
     this->mpu_accel.angular.z = gyro_z_raw;  // z_odom = z_imu
     
-    // Nota: A translação (0.105m, 0.03m, 0m) não afeta as medições de aceleração/gyro
+    this->mpu_accel.magnetic.x = mag_y_raw;  // x_odom = y_imu
+    this->mpu_accel.magnetic.y = mag_x_raw;  // y_odom = x_imu  
+    this->mpu_accel.magnetic.z = mag_z_raw;  // z_odom = z_imu
 }
 
 void DiffCar::update_mpu() {
@@ -92,7 +98,12 @@ void DiffCar::calibrate_imu() {
     Serial.println("Calibrating Accelerometer...");
     this->calibrate_accel(5);
     
+    Serial.println("Calculating and setting Magnetometer Offsets...");
+    this->calibrate_magnetometer(5);
+
     Serial.println("Advanced IMU Calibration complete!");
+
+
 }
 
 void DiffCar::debug_mpu() {
@@ -143,7 +154,17 @@ void DiffCar::calibrate_accel(uint8_t loops) {
     this->pid_calibration(0x3B, kP, kI, loops);  // 0x3B = ACCEL_XOUT_H register
     Serial.println(" Done!");
 }
+void DiffCar::calibrate_magnetometer(uint8_t loops) {
+    float kP = 0.3;
+    float kI = 20;
+    float x = (100 - map(loops, 1, 5, 20, 0)) * 0.01;
+    kP *= x;
+    kI *= x;
 
+    Serial.print("Magnetometer calibration: ");
+    this->pid_calibration(0x48, kP, kI, loops);  // 0x3B = ACCEL_XOUT_H register
+    Serial.println(" Done!");
+}
 /**
  * @brief PID-based calibration algorithm for MPU6050/MPU9250
  */
@@ -193,19 +214,14 @@ void DiffCar::pid_calibration(uint8_t readAddress, float kP, float kI, uint8_t l
                 Wire.write(readAddress + (i * 2));
                 Wire.endTransmission(false);
                 Wire.requestFrom(mpuAddress, 2);
-                
                 if (Wire.available() >= 2) {
                     data = (Wire.read() << 8) | Wire.read();
                     reading = data;
-                    
                     if ((readAddress == 0x3B) && (i == 2)) reading -= 16384;  // Remove gravity from Z-axis accel
-                    
                     error = -reading;  // PID is reverse
                     eSum += (reading < 0) ? error : reading;  // Only positive numbers
-                    
                     pTerm = kP * error;
                     iTerm[i] += (error * 0.001) * kI;  // Integral term
-                    
                     if (saveAddress != 0x13) {  // Accelerometer
                         data = round((pTerm + iTerm[i]) / 8);
                         if (abs(error) > 400) {
@@ -221,7 +237,6 @@ void DiffCar::pid_calibration(uint8_t readAddress, float kP, float kI, uint8_t l
                     } else {  // Gyroscope
                         data = round((pTerm + iTerm[i]) / 4);
                     }
-                    
                     // Write offset value
                     Wire.beginTransmission(mpuAddress);
                     Wire.write(saveAddress + (i * shift));
@@ -230,15 +245,12 @@ void DiffCar::pid_calibration(uint8_t readAddress, float kP, float kI, uint8_t l
                     Wire.endTransmission();
                 }
             }
-            
             if ((c == 99) && eSum > 1000) {
                 c = 2;
                 Serial.write('-');
             }
-            
             if ((eSum * ((readAddress == 0x3B) ? 0.05 : 1)) < 5) eSample++;
             if ((eSum < 100) && (c > 10) && (eSample >= 10)) break;
-            
             delay(1);
         }
         Serial.write('.');

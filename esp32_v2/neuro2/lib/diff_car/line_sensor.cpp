@@ -70,6 +70,9 @@ void DiffCar::debug_line() {
 }
 
 void DiffCar::follow_line(float base_speed, float kp) {
+    // Detecta marcadores de linha (linhas perpendiculares)
+    this->detect_line_markers();
+		
     // Controlador PID simples para seguir linha
     // line_distance_mm: negativo = linha à esquerda, positivo = linha à direita
     
@@ -102,4 +105,55 @@ void DiffCar::follow_line(float base_speed, float kp) {
     // Define velocidades alvo
     this->left_velocity_target = left_speed;
     this->right_velocity_target = right_speed;
+}
+
+void DiffCar::detect_line_markers() {
+    // Detecta marcadores de linha (linhas perpendiculares à linha principal)
+    // Quando todos os 8 sensores detectam preto simultaneamente = marcador
+    
+    // Calcula quantos sensores estão vendo preto
+    uint8_t sensors_active = 0;
+    uint32_t total_value = 0;
+    
+    for (int i = 0; i < 8; i++) {
+        total_value += this->line_sensor_array[i];
+        // Se valor alto = preto detectado
+        if (this->line_sensor_array[i] > 2000) {
+            sensors_active++;
+        }
+    }
+    
+    // Média dos sensores para detecção mais robusta
+    uint16_t avg_value = total_value / 8;
+    
+    // Detecta marcador: pelo menos 6 sensores ativos OU média acima do threshold
+    bool marker_now = (sensors_active >= 6) || (avg_value > this->marker_threshold);
+    
+    // Detecção de borda (transição de não-marcador para marcador)
+    if (marker_now && !this->line_marker_detected) {
+        // Marcador detectado! Incrementa contador
+        this->line_marker_count++;
+        
+        // Calcula distância baseada no número de marcadores
+        this->line_marker_distance_m = (float)this->line_marker_count * this->marker_spacing_m;
+        
+        // Atualiza timestamp
+        this->last_marker_time_ms = millis();
+        
+        // Debug
+        Serial.printf("🎯 Marcador #%d detectado! Distância: %.2f m\n", 
+                     this->line_marker_count, this->line_marker_distance_m);
+    }
+    
+    // Atualiza flag de detecção para próxima iteração
+    this->line_marker_detected = marker_now;
+}
+
+void DiffCar::reset_line_markers() {
+    // Reseta contador de marcadores (útil ao iniciar novo percurso)
+    this->line_marker_count = 0;
+    this->line_marker_distance_m = 0.0;
+    this->line_marker_detected = false;
+    this->last_marker_time_ms = millis();
+    Serial.println("📍 Marcadores resetados");
 }

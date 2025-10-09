@@ -56,8 +56,8 @@ class TelemetryParser:
     def parse_binary(data):
         """
         Parse binary telemetry format from ESP32
-        Format: [header:2][encoders:8][velocities:16][pwm:8][gains:8][odom_pos:12][odom_vel:12][imu:12][line:2][gps:17][rfid:12]
-        Total: ~119 bytes
+        Format: [header:2][encoders:8][velocities:16][pwm:8][gains:8][odom_pos:12][odom_vel:12][imu:12][line:2][line_markers:6][gps:17][rfid:12]
+        Total: ~125 bytes
         """
         result = {}
         
@@ -115,6 +115,15 @@ class TelemetryParser:
             line_dist, = struct.unpack_from('<h', data, offset)
             result['LINE'] = line_dist
             offset += 2
+            
+            # Line markers (1 x uint16 count + 1 x float32 distance)
+            marker_count, = struct.unpack_from('<H', data, offset)
+            result['MARKER_CNT'] = marker_count
+            offset += 2
+            
+            marker_dist, = struct.unpack_from('<f', data, offset)
+            result['MARKER_DIST'] = marker_dist
+            offset += 4
             
             # GPS (4 x float32 + 1 x uint8)
             gps_lat, gps_lon, gps_alt, gps_spd = struct.unpack_from('<ffff', data, offset)
@@ -219,7 +228,12 @@ class TelemetryDisplay:
             ("LINE_DIST", "Distância", -1000, 1000)
         ], parent=self.column2)
         
-        self.create_group("🌍 GPS", [
+        self.create_group("� Marcadores de Linha", [
+            ("MARKER_CNT", "Contador", 0, 100),
+            ("MARKER_DIST", "Distância (m)", 0, 50)
+        ], parent=self.column2)
+        
+        self.create_group("�🌍 GPS", [
             ("GPS_LAT", "Latitude", -90, 90),
             ("GPS_LNG", "Longitude", -180, 180),
             ("GPS_ALT", "Altitude (m)", 0, 1000),
@@ -746,12 +760,32 @@ class RobotGUI:
         
         self.line_following_active = False
         
-        # Telemetria
+        # Marcadores de linha
         ttk.Separator(advanced_frame, orient="horizontal").grid(row=11, column=0, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(advanced_frame, text="🎯 Marcadores", font=('TkDefaultFont', 9, 'bold')).grid(row=12, column=0, pady=(5,2))
+        
+        ttk.Button(advanced_frame, text="🔄 Reset Marcadores", 
+                  command=self.reset_markers).grid(row=13, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        
+        # Configuração de espaçamento
+        spacing_frame = ttk.Frame(advanced_frame)
+        spacing_frame.grid(row=14, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        ttk.Label(spacing_frame, text="Espaço (m):").pack(side=tk.LEFT, padx=(0, 5))
+        self.marker_spacing_var = tk.DoubleVar(value=0.5)
+        spacing_spin = ttk.Spinbox(spacing_frame, from_=0.1, to=5.0, increment=0.1, width=6,
+                                  textvariable=self.marker_spacing_var, format="%.1f")
+        spacing_spin.pack(side=tk.LEFT)
+        
+        ttk.Button(advanced_frame, text="⚙️ Aplicar Espaçamento", 
+                  command=self.apply_marker_spacing).grid(row=15, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        
+        # Telemetria
+        ttk.Separator(advanced_frame, orient="horizontal").grid(row=16, column=0, sticky=(tk.W, tk.E), pady=5)
         
         # Controle de taxa de atualização
         hz_frame = ttk.Frame(advanced_frame)
-        hz_frame.grid(row=12, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        hz_frame.grid(row=17, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
         ttk.Label(hz_frame, text="Taxa:").pack(side=tk.LEFT, padx=(0, 5))
         hz_spinbox = ttk.Spinbox(hz_frame, from_=1, to=30, width=5, 
@@ -761,14 +795,14 @@ class RobotGUI:
         
         self.telemetry_btn = ttk.Button(advanced_frame, text="📊 Iniciar Telemetria", 
                                       command=self.toggle_telemetry)
-        self.telemetry_btn.grid(row=13, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        self.telemetry_btn.grid(row=18, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
         # Display de telemetria
         self.telemetry_text = scrolledtext.ScrolledText(advanced_frame, width=30, height=8)
-        self.telemetry_text.grid(row=14, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.telemetry_text.grid(row=19, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         advanced_frame.columnconfigure(0, weight=1)
-        advanced_frame.rowconfigure(14, weight=1)
+        advanced_frame.rowconfigure(19, weight=1)
         
     def create_status_frame(self, parent):
         """Cria frame de status e log"""
@@ -1073,6 +1107,26 @@ class RobotGUI:
         command = f"CMD:FOLLOW_LINE_CFG:{speed:.2f} {kp:.4f}"
         self.send_command(command)
         self.log_message(f"⚙️ Config seguidor: velocidade={speed:.2f}, Kp={kp:.4f}")
+    
+    def reset_markers(self):
+        """Reseta contador de marcadores"""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Aviso", "Conecte-se ao ESP32 primeiro")
+            return
+            
+        self.send_command("CMD:MARKER_RESET")
+        self.log_message("🎯 Marcadores resetados")
+    
+    def apply_marker_spacing(self):
+        """Aplica espaçamento entre marcadores"""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Aviso", "Conecte-se ao ESP32 primeiro")
+            return
+            
+        spacing = self.marker_spacing_var.get()
+        command = f"CMD:MARKER_SPACING:{spacing:.1f}"
+        self.send_command(command)
+        self.log_message(f"🎯 Espaçamento marcadores: {spacing:.1f} m")
             
     def update_telemetry(self, data):
         """Atualiza display de telemetria"""

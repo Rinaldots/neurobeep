@@ -46,6 +46,7 @@ struct Twist {
 struct Accel{
     Vector3 linear;
     Vector3 angular;
+    Vector3 magnetic;
 };
 // geometry_msgs from ROS2
 struct MotorPwmResult {
@@ -131,6 +132,14 @@ public:
     uint16_t line_position_value = 0;
     int16_t line_distance_mm = 0;  // Distância da linha do centro em mm (inteiro)
     
+    // Line marker detection (linhas de controle perpendiculares)
+    uint16_t line_marker_count = 0;          // Contador de marcadores detectados
+    float line_marker_distance_m = 0.0;      // Distância calculada em metros
+    bool line_marker_detected = false;       // Flag de detecção de marcador
+    unsigned long last_marker_time_ms = 0;   // Timestamp do último marcador
+    float marker_spacing_m = 0.5;            // Espaçamento entre marcadores (configurável)
+    uint16_t marker_threshold = 3500;        // Threshold para detecção (todos sensores ativos)
+    
     String rfid_uid;
     Pose light_sensor;
     Accel mpu_accel;
@@ -168,6 +177,7 @@ public:
     void calibrate_imu();  // Calibração do IMU
     void calibrate_gyro(uint8_t loops);  // Calibração específica do giroscópio
     void calibrate_accel(uint8_t loops); // Calibração específica do acelerômetro
+    void calibrate_magnetometer(uint8_t loops); // Calibração específica do magnetômetro
     void pid_calibration(uint8_t readAddress, float kP, float kI, uint8_t loops); // Algoritmo PID de calibração
 
     // RFID functions
@@ -178,6 +188,8 @@ public:
     void debug_line();
     int16_t line_dist_center_mm();  // Versão inteira, mais leve
     void follow_line(float base_speed = 0.3, float kp = 0.001);  // Seguidor de linha com PID
+    void detect_line_markers();  // Detecta linhas perpendiculares (marcadores de controle)
+    void reset_line_markers();   // Reseta contador de marcadores
 
     // Line following state
     bool line_following_enabled = false;

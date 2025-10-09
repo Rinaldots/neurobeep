@@ -21,12 +21,12 @@ String receivedData = "";
 
 // Telemetry cache / limits
 #ifndef TELEMETRY_MAX_LEN
-#define TELEMETRY_MAX_LEN 120
+#define TELEMETRY_MAX_LEN 130
 #endif
 
 // Per-part length used when splitting telemetry into multiple packets
 #ifndef TELEMETRY_PART_LEN
-#define TELEMETRY_PART_LEN 120
+#define TELEMETRY_PART_LEN 130
 #endif
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -122,8 +122,8 @@ void BluetoothCommunication::sendData(const char* data) {
 
 void BluetoothCommunication::updateTelemetryCache() {
     // Build compact binary telemetry to reduce BLE payload and notify time
-    // Format: [header:2][encoders:8][velocities:16][pwm:8][gains:8][odom_pos:12][odom_vel:12][imu:12][line:2][gps:17][rfid:12]
-    // Total: ~119 bytes 
+    // Format: [header:2][encoders:8][velocities:16][pwm:8][gains:8][odom_pos:12][odom_vel:12][imu:12][line:2][line_markers:6][gps:17][rfid:12]
+    // Total: ~125 bytes 
     
     telemetry_cache_binary_len = 0;
     uint8_t* ptr = telemetry_cache_binary;
@@ -179,6 +179,10 @@ void BluetoothCommunication::updateTelemetryCache() {
     // Line sensor (1 x int16 distance mm)
     int16_t line_dist = diffCar.line_distance_mm;
     memcpy(ptr, &line_dist, 2); ptr += 2;
+    
+    // Line markers (1 x uint16 count + 1 x float32 distance = 6 bytes)
+    memcpy(ptr, &diffCar.line_marker_count, 2); ptr += 2;
+    memcpy(ptr, &diffCar.line_marker_distance_m, 4); ptr += 4;
     
     // GPS (4 x float32 + 1 x uint8 = 17 bytes)
     memcpy(ptr, &diffCar.gps_latitude, 4); ptr += 4;
@@ -303,6 +307,23 @@ void BluetoothCommunication::processCommand(String command) {
             diffCar.line_follow_base_speed = base_speed;
             diffCar.line_follow_kp = kp;
         }
+    }
+    else if (command == "MARKER_RESET") {
+        // Reseta contador de marcadores
+        if (DEBUG_BLE) Serial.println("Comando: Reset marcadores de linha");
+        diffCar.reset_line_markers();
+    }
+    else if (command.startsWith("MARKER_SPACING:")) {
+        // Configura espaçamento entre marcadores: MARKER_SPACING:0.5
+        float spacing = command.substring(15).toFloat();
+        if (DEBUG_BLE) Serial.printf("Comando: Espaçamento marcadores = %.2f m\n", spacing);
+        diffCar.marker_spacing_m = spacing;
+    }
+    else if (command.startsWith("MARKER_THRESHOLD:")) {
+        // Configura threshold de detecção: MARKER_THRESHOLD:3500
+        uint16_t threshold = command.substring(17).toInt();
+        if (DEBUG_BLE) Serial.printf("Comando: Threshold marcadores = %d\n", threshold);
+        diffCar.marker_threshold = threshold;
     }
     else {
         if (DEBUG_BLE) Serial.println("Comando desconhecido: " + command);
