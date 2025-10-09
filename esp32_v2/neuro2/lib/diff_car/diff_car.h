@@ -11,6 +11,7 @@
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522Debug.h>
 #include <QTRSensors.h>
+#include <Preferences.h>
 #include <QuickPID.h>
 #include <ESP32Encoder.h>
 
@@ -217,6 +218,11 @@ public:
         double H[EKF_M*EKF_N]
     );
     void reset_kalman_filter();
+
+    // Persist QTR calibration
+    bool load_qtr_calibration();
+    void save_qtr_calibration();
+    void calibrate_line_sensors();
 
 };
 

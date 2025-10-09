@@ -113,7 +113,7 @@ class TelemetryParser:
             
             # Line sensor (1 x int16)
             line_dist, = struct.unpack_from('<h', data, offset)
-            result['LINE'] = line_dist
+            result['LINE_DIST'] = line_dist
             offset += 2
             
             # Line markers (1 x uint16 count + 1 x float32 distance)
@@ -143,7 +143,7 @@ class TelemetryParser:
             if rfid_str:
                 result['RFID'] = rfid_str
             offset += 12
-            
+            #print(data)
         except Exception as e:
             print(f"Erro ao decodificar telemetria binária: {e}")
         
@@ -217,20 +217,13 @@ class TelemetryDisplay:
             ("IMU_AZ", "Aceleração Z", -20, 20)
         ], parent=self.column2)
         
-        self.create_group("🌀 IMU Giroscópio (rad/s)", [
-            ("IMU_GX", "Giro X", -5, 5),
-            ("IMU_GY", "Giro Y", -5, 5),
-            ("IMU_GZ", "Giro Z", -5, 5)
-        ], parent=self.column2)
-        
         self.create_group("📏 Sensor de Linha", [
-            ("LINE_POS", "Posição", -1000, 1000),
-            ("LINE_DIST", "Distância", -1000, 1000)
+            ("LINE_DIST", "Distância", -3000, 3000)
         ], parent=self.column2)
-        
-        self.create_group("� Marcadores de Linha", [
+
+        self.create_group("🟡 Marcadores de Linha", [
             ("MARKER_CNT", "Contador", 0, 100),
-            ("MARKER_DIST", "Distância (m)", 0, 50)
+            ("MARKER_DIST", "Distância (m)", -3000, 3000)
         ], parent=self.column2)
         
         self.create_group("�🌍 GPS", [
@@ -716,8 +709,8 @@ class RobotGUI:
         ttk.Button(advanced_frame, text="START", 
                   command=lambda: self.send_command("CMD:START")).grid(row=0, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
-        ttk.Button(advanced_frame, text="RESET_KALMAN", 
-                  command=lambda: self.send_command("CMD:RESET_KALMAN")).grid(row=1, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        ttk.Button(advanced_frame, text="CALIBRATE_LINE_SENSORS", 
+                  command=lambda: self.send_command("CMD:CALIBRATE_LINE_SENSORS")).grid(row=1, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
         ttk.Button(advanced_frame, text="CALIBRATE_IMU", 
                   command=lambda: self.send_command("CMD:CALIBRATE_IMU")).grid(row=2, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))

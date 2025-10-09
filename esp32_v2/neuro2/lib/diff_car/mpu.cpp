@@ -92,14 +92,14 @@ void DiffCar::calibrate_imu() {
     
     // Calibração do Giroscópio (5 loops)
     Serial.println("Calibrating Gyroscope...");
-    this->calibrate_gyro(5);
+    this->calibrate_gyro(10);
     
     // Calibração do Acelerômetro (5 loops)  
     Serial.println("Calibrating Accelerometer...");
     this->calibrate_accel(5);
     
     Serial.println("Calculating and setting Magnetometer Offsets...");
-    this->calibrate_magnetometer(5);
+    this->calibrate_magnetometer(2);
 
     Serial.println("Advanced IMU Calibration complete!");
 

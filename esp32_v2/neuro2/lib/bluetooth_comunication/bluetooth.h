@@ -270,6 +270,9 @@ void BluetoothCommunication::processCommand(String command) {
         if (DEBUG_BLE) Serial.println("Comando: Calibrar IMU");
         diffCar.calibrate_imu();
     }
+    else if (command == "CALIBRATE_LINE_SENSORS") {
+        diffCar.calibrate_line_sensors();
+    }
     else if (command.startsWith("VEL:")) {
         // Comando para definir velocidade: VEL:0.50 0.50 (esquerda direita)
         float left_velocity = command.substring(4, command.indexOf(' ', 4)).toFloat();

@@ -35,7 +35,7 @@ const float wheel_diameter_m = 0.065; // opcional para converter em m/s
 const unsigned long DEBOUNCE_US = 3000; // rejeita pulsos < 3 ms (ajuste)
 const unsigned long SAMPLE_MS = 100;    // janela principal de cálculo (100 ms)
 const int MEDIAN_WINDOW = 5;            // janela mediana (odd)
-const float EMA_ALPHA = 0.3f;           // 0..1, maior = resposta mais rápida
+const float EMA_ALPHA = 0.1f;           // 0..1, maior = resposta mais rápida
 #define ENCODER_A_1 14
 #define ENCODER_A_2 13
 #define ENCODER_B_1 11
@@ -49,12 +49,9 @@ const float EMA_ALPHA = 0.3f;           // 0..1, maior = resposta mais rápida
 #define C3 -1.85446691e+00
 // Variavei PID
 #define KP 0.5
-#define KI 20.0
-#define KD 10.0
-// Variavei PID seguir linha
-#define KP_l 0.0  
-#define KI_l 35.0
-#define KD_l 35.0
+#define KI 50.0
+#define KD 25.0
+
 
 
 

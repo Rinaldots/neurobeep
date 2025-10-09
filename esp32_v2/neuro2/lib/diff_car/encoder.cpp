@@ -34,6 +34,8 @@ void DiffCar::velocity_update() {
     // Ler contagem atual dos encoders
     int64_t left_count_now  = encoder_left.getCount();
     int64_t right_count_now = encoder_right.getCount();
+    this->encoder_left_count = left_count_now;
+    this->encoder_right_count = right_count_now;
 
     // Tempo atual
     unsigned long now_ms = millis();

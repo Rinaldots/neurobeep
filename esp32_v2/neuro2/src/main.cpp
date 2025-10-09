@@ -27,7 +27,7 @@ void setup() {
 	Serial.println("Starting...");
 	ekf_t ekf = {0};
 	bluetooth.begin();
-	diffCar.calibrated = true; 
+	diffCar.calibrated = false; 
 	diffCar.setup();
 	
 	// Cria task BLE em Core 0 (Core 1 fica para o loop principal)
@@ -124,6 +124,7 @@ void loop() {
 		//diffCar.debug_mpu();
 		//diffCar.debug_encoder();
 		//diffCar.odometry.debug();
+		//diffCar.debug_line();
 
 
 		
