@@ -40,7 +40,6 @@ void Diff_Odometry::update_raw_velocity(float left_velocity, float right_velocit
     this->vel_raw.angular.z = w;
 }
 
-
 void Diff_Odometry::set_angular_position(float roll, float pitch, float yaw){
     this->pose.orientation.x = roll;
     this->pose.orientation.y = pitch;

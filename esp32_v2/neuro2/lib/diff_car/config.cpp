@@ -34,8 +34,8 @@ const int pulses_per_rev = 16*4;    // pulsos por volta do encoder (ajuste)
 const float wheel_diameter_m = 0.065; // opcional para converter em m/s
 const unsigned long DEBOUNCE_US = 3000; // rejeita pulsos < 3 ms (ajuste)
 const unsigned long SAMPLE_MS = 100;    // janela principal de cálculo (100 ms)
-const int MEDIAN_WINDOW = 3;            // janela mediana (odd)
-const float EMA_ALPHA = 0.9;           // 0..1, maior = resposta mais rápida
+const int MEDIAN_WINDOW = 5;            // janela mediana (odd)
+const float EMA_ALPHA = 0.3f;           // 0..1, maior = resposta mais rápida
 #define ENCODER_A_1 14
 #define ENCODER_A_2 13
 #define ENCODER_B_1 11

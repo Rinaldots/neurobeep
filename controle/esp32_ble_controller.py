@@ -12,18 +12,30 @@ import asyncio
 from datetime import datetime
 from bleak import BleakClient, BleakScanner
 import re
+import struct
 
 SERVICE_UUID = "8f3b6fcf-6d12-437f-8b68-9a3494fbe656"
 CHAR_UUID    = "d5593e6b-3328-493a-b3c9-9814683d8e40"
 
 class TelemetryParser:
-    """Parser para dados de telemetria do ESP32"""
+    """Parser para dados de telemetria do ESP32 (formato binário ou texto)"""
     
     @staticmethod
-    def parse(data_str):
-        """Parse string de telemetria para dicionário"""
+    def parse(data):
+        """Parse telemetry data - supports both binary and text format"""
         result = {}
         
+        # Detect binary format by checking for 0xBEEF header
+        if isinstance(data, (bytes, bytearray)) and len(data) >= 2:
+            if data[0] == 0xBE and data[1] == 0xEF:
+                return TelemetryParser.parse_binary(data)
+        
+        # Fall back to text format
+        if isinstance(data, bytes):
+            data_str = data.decode('utf-8', errors='ignore')
+        else:
+            data_str = str(data)
+            
         # Pattern: NOME:valor
         pattern = r'([A-Z_]+):([-+]?[0-9]*\.?[0-9]+)'
         matches = re.findall(pattern, data_str)
@@ -37,6 +49,94 @@ class TelemetryParser:
                     result[key] = int(value)
             except ValueError:
                 result[key] = value
+        
+        return result
+    
+    @staticmethod
+    def parse_binary(data):
+        """
+        Parse binary telemetry format from ESP32
+        Format: [header:2][encoders:8][velocities:16][pwm:8][gains:8][odom_pos:12][odom_vel:12][imu:12][line:2][gps:17][rfid:12]
+        Total: ~119 bytes
+        """
+        result = {}
+        
+        try:
+            offset = 2  # Skip 0xBEEF header
+            
+            # Encoders (2 x int32)
+            enc_l, enc_r = struct.unpack_from('<ii', data, offset)
+            result['ENC_L'] = enc_l
+            result['ENC_R'] = enc_r
+            offset += 8
+            
+            # Velocities (4 x float32)
+            vel_l, vel_r, tgt_l, tgt_r = struct.unpack_from('<ffff', data, offset)
+            result['VEL_L'] = vel_l
+            result['VEL_R'] = vel_r
+            result['TGT_L'] = tgt_l
+            result['TGT_R'] = tgt_r
+            offset += 16
+            
+            # PWM (2 x float32) - offset should be 26 here
+            pwm_l, pwm_r = struct.unpack_from('<ff', data, offset)
+            result['PWM_L'] = pwm_l
+            result['PWM_R'] = pwm_r
+            offset += 8
+            
+            # Gains (2 x float32) - offset should be 34 here
+            gain_l, gain_r = struct.unpack_from('<ff', data, offset)
+            result['GAIN_L'] = gain_l
+            result['GAIN_R'] = gain_r
+            offset += 8
+            
+            # Odometry position (3 x float32: x, y, theta) - offset should be 42 here
+            odom_x, odom_y, odom_th = struct.unpack_from('<fff', data, offset)
+            result['ODOM_X'] = odom_x
+            result['ODOM_Y'] = odom_y
+            result['ODOM_TH'] = odom_th
+            offset += 12
+            
+            # Odometry velocity (3 x float32: vx, vy, omega)
+            odom_vx, odom_vy, odom_w = struct.unpack_from('<fff', data, offset)
+            result['ODOM_VX'] = odom_vx
+            result['ODOM_VY'] = odom_vy
+            result['ODOM_W'] = odom_w
+            offset += 12
+            
+            # IMU accel (3 x float32)
+            imu_ax, imu_ay, imu_az = struct.unpack_from('<fff', data, offset)
+            result['IMU_AX'] = imu_ax
+            result['IMU_AY'] = imu_ay
+            result['IMU_AZ'] = imu_az
+            offset += 12
+            
+            # Line sensor (1 x int16)
+            line_dist, = struct.unpack_from('<h', data, offset)
+            result['LINE'] = line_dist
+            offset += 2
+            
+            # GPS (4 x float32 + 1 x uint8)
+            gps_lat, gps_lon, gps_alt, gps_spd = struct.unpack_from('<ffff', data, offset)
+            result['GPS_LAT'] = gps_lat
+            result['GPS_LNG'] = gps_lon  # Interface usa GPS_LNG, não GPS_LON
+            result['GPS_ALT'] = gps_alt
+            result['GPS_SPD'] = gps_spd
+            offset += 16
+            
+            gps_valid, = struct.unpack_from('<B', data, offset)
+            result['GPS_VAL'] = gps_valid  # Interface usa GPS_VAL, não GPS_VALID
+            offset += 1
+            
+            # RFID (12-char string)
+            rfid_bytes = data[offset:offset+12]
+            rfid_str = rfid_bytes.decode('utf-8', errors='ignore').rstrip('\x00')
+            if rfid_str:
+                result['RFID'] = rfid_str
+            offset += 12
+            
+        except Exception as e:
+            print(f"Erro ao decodificar telemetria binária: {e}")
         
         return result
 
@@ -65,25 +165,32 @@ class TelemetryDisplay:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Grupos de dados
+        # Criar duas colunas
+        self.column1 = ttk.Frame(self.scrollable_frame)
+        self.column1.grid(row=0, column=0, sticky=(tk.N, tk.W, tk.E), padx=5)
+        
+        self.column2 = ttk.Frame(self.scrollable_frame)
+        self.column2.grid(row=0, column=1, sticky=(tk.N, tk.W, tk.E), padx=5)
+        
+        # COLUNA 1 - Dados principais do robô
         self.create_group("🚗 Encoders", [
             ("ENC_L", "Encoder Esquerdo", 0, 1000),
             ("ENC_R", "Encoder Direito", 0, 1000)
-        ])
+        ], parent=self.column1)
         
         self.create_group("🏎️ Velocidades (m/s)", [
             ("VEL_L", "Velocidade Esquerda", -0.5, 0.5),
             ("VEL_R", "Velocidade Direita", -0.5, 0.5),
             ("TGT_L", "Target Esquerda", -0.5, 0.5),
             ("TGT_R", "Target Direita", -0.5, 0.5)
-        ])
+        ], parent=self.column1)
         
         self.create_group("⚡ PWM (0-255)", [
             ("PWM_L", "PWM Esquerdo", 0, 255),
             ("PWM_R", "PWM Direito", 0, 255),
             ("GAIN_L", "Gain Esquerdo", 0, 255),
             ("GAIN_R", "Gain Direito", 0, 255)
-        ])
+        ], parent=self.column1)
         
         self.create_group("📍 Odometria", [
             ("ODOM_X", "Posição X (m)", -5, 5),
@@ -92,24 +199,25 @@ class TelemetryDisplay:
             ("ODOM_VX", "Velocidade X", -1, 1),
             ("ODOM_VY", "Velocidade Y", -1, 1),
             ("ODOM_W", "Velocidade Angular", -2, 2)
-        ])
+        ], parent=self.column1)
         
+        # COLUNA 2 - Sensores
         self.create_group("📡 IMU Acelerômetro (m/s²)", [
             ("IMU_AX", "Aceleração X", -20, 20),
             ("IMU_AY", "Aceleração Y", -20, 20),
             ("IMU_AZ", "Aceleração Z", -20, 20)
-        ])
+        ], parent=self.column2)
         
         self.create_group("🌀 IMU Giroscópio (rad/s)", [
             ("IMU_GX", "Giro X", -5, 5),
             ("IMU_GY", "Giro Y", -5, 5),
             ("IMU_GZ", "Giro Z", -5, 5)
-        ])
+        ], parent=self.column2)
         
         self.create_group("📏 Sensor de Linha", [
             ("LINE_POS", "Posição", -1000, 1000),
             ("LINE_DIST", "Distância", -1000, 1000)
-        ])
+        ], parent=self.column2)
         
         self.create_group("🌍 GPS", [
             ("GPS_LAT", "Latitude", -90, 90),
@@ -117,11 +225,15 @@ class TelemetryDisplay:
             ("GPS_ALT", "Altitude (m)", 0, 1000),
             ("GPS_SPD", "Velocidade", 0, 100),
             ("GPS_VAL", "Válido", 0, 1)
-        ])
+        ], parent=self.column2)
         
-    def create_group(self, title, fields):
+    def create_group(self, title, fields, parent=None):
         """Cria um grupo de displays com título"""
-        group_frame = ttk.LabelFrame(self.scrollable_frame, text=title, padding=10)
+        # Se parent não for especificado, usa scrollable_frame como padrão
+        if parent is None:
+            parent = self.scrollable_frame
+            
+        group_frame = ttk.LabelFrame(parent, text=title, padding=10)
         group_frame.pack(fill=tk.X, padx=5, pady=5)
         
         for i, (key, label, min_val, max_val) in enumerate(fields):
@@ -206,6 +318,11 @@ class ESP32BLEController:
         # Placeholders inicializados no bootstrap assíncrono
         self.command_queue = None
         self.connected = None
+        # Contador e lock para manter ordem entre comandos com mesma prioridade
+        self._cmd_counter = 0
+        self._cmd_lock = threading.Lock()
+        # Flag para evitar enfileirar múltiplos pedidos de telemetria simultâneos
+        self._telemetry_queued = False
 
         # Inicializa estruturas assíncronas dentro do loop dedicado
         asyncio.run_coroutine_threadsafe(self._bootstrap_async(), self.loop)
@@ -216,7 +333,8 @@ class ESP32BLEController:
 
     async def _bootstrap_async(self):
         # Criadas dentro do loop para evitar problemas de binding
-        self.command_queue = asyncio.Queue()
+        # Usa uma fila de prioridade: (priority, counter, message, response)
+        self.command_queue = asyncio.PriorityQueue()
         self.connected = asyncio.Event()
         # Inicia worker de envio
         self.loop.create_task(self._command_worker())
@@ -251,41 +369,84 @@ class ESP32BLEController:
     def _notification_handler(self, sender, data):
         """Handler para notificações BLE recebidas do ESP32"""
         try:
-            received = data.decode("utf-8")
-            self.telemetry_data = received
-            #print(f"📥 Telemetria recebida: {received}")
+            # Agora suporta tanto formato binário quanto texto
+            self.telemetry_data = data  # Mantém dados brutos (bytes ou string)
             
             # Chama callback se existir (para atualizar GUI)
             if self.telemetry_callback:
-                self.telemetry_callback(received)
+                self.telemetry_callback(data)
         except Exception as e:
             print(f"Erro ao processar notificação: {e}")
 
     async def _command_worker(self):
         """Processa fila de comandos para evitar GATT congestionado"""
         while True:
-            message = await self.command_queue.get()
+            # Espera tuple (priority, count, message, response)
             try:
-                await self._send_ble_async(message)
+                priority, count, message, response = await self.command_queue.get()
+            except Exception as e:
+                print(f"⚠️ Erro ao obter comando da fila: {e}")
+                await asyncio.sleep(0.05)
+                continue
+
+            try:
+                await self._send_ble_async(message, response=response)
             except Exception as e:
                 print(f"⚠️ Erro ao enviar '{message}': {e}")
-            await asyncio.sleep(0.2)
-            self.command_queue.task_done()
 
-    async def _send_ble_async(self, message):
+            # Se for telemetria, libera a flag para permitir próximo pedido
+            if isinstance(message, str) and message.startswith("RQS"):
+                # Protege acesso concorrente
+                try:
+                    self._cmd_lock.acquire()
+                    self._telemetry_queued = False
+                finally:
+                    self._cmd_lock.release()
+
+            # Pequeno delay para não sobrecarregar GATT; mantido baixo para alta responsividade
+            await asyncio.sleep(0.05)
+            try:
+                self.command_queue.task_done()
+            except Exception:
+                pass
+
+    async def _send_ble_async(self, message, response=True):
         if not self.client or not self.client.is_connected:
             print("⚠️ Cliente BLE não está conectado, aguardando...")
             if self.connected:
                 await self.connected.wait()
 
         data = message.encode("utf-8")
-        await self.client.write_gatt_char(CHAR_UUID, data, response=True)
-        #print(f"📤 Enviado: {message}")
+        # response flag permite enviar telemetria sem bloquear por confirmação quando apropriado
+        await self.client.write_gatt_char(CHAR_UUID, data, response=response)
 
     def send_command(self, message):
         """Interface pública segura — pode ser chamada de qualquer thread"""
-        asyncio.run_coroutine_threadsafe(self.command_queue.put(message), self.loop)
-        return True
+        # API mantida, mas agora enfileira com prioridade padrão (1)
+        return self.send_command_with_priority(message, priority=1, response=True)
+
+    def send_command_with_priority(self, message, priority=1, response=True):
+        """Enfileira um comando com prioridade (menor valor = maior prioridade).
+        Pode ser chamado de qualquer thread.
+        """
+        # Garante ordem entre itens com mesma prioridade
+        with self._cmd_lock:
+            count = self._cmd_counter
+            self._cmd_counter += 1
+
+            # Se for pedido de telemetria e já houver um pendente, ignora
+            if isinstance(message, str) and message.startswith("RQS"):
+                if self._telemetry_queued:
+                    return False
+                self._telemetry_queued = True
+
+        # Coloca na fila de prioridade
+        try:
+            asyncio.run_coroutine_threadsafe(self.command_queue.put((priority, count, message, response)), self.loop)
+            return True
+        except Exception as e:
+            print(f"❌ Erro ao enfileirar comando: {e}")
+            return False
 
     async def disconnect(self):
         self._manual_disconnect = True  # Sinaliza desconexão manual
@@ -364,7 +525,9 @@ class ESP32BLEController:
     def request_telemetry(self):
         """Solicita telemetria do ESP32 enviando comando RQS:"""
         try:
-            self.send_command("RQS:")
+            # Telemetria tem prioridade baixa para não bloquear comandos de controle
+            # usa response=False para reduzir espera por confirmação quando possível
+            self.send_command_with_priority("RQS:", priority=10, response=False)
             return self.telemetry_data  # Retorna último dado recebido
         except Exception as e:
             print(f"Erro ao solicitar telemetria: {e}")
@@ -551,29 +714,61 @@ class RobotGUI:
         ttk.Button(advanced_frame, text="🧪 Teste Conexão", 
                   command=lambda: self.send_command("CMD:TEST")).grid(row=4, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
-        # Telemetria
+        # Seguidor de linha
         ttk.Separator(advanced_frame, orient="horizontal").grid(row=5, column=0, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(advanced_frame, text="🛤️ Seguidor de Linha", font=('TkDefaultFont', 9, 'bold')).grid(row=6, column=0, pady=(5,2))
+        
+        self.line_follow_btn = ttk.Button(advanced_frame, text="▶️ Iniciar Seguidor", 
+                  command=self.toggle_line_follower)
+        self.line_follow_btn.grid(row=7, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        
+        # Configuração de velocidade base
+        speed_frame = ttk.Frame(advanced_frame)
+        speed_frame.grid(row=8, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        ttk.Label(speed_frame, text="Vel:").pack(side=tk.LEFT, padx=(0, 5))
+        self.line_speed_var = tk.DoubleVar(value=0.3)
+        speed_spin = ttk.Spinbox(speed_frame, from_=0.1, to=0.5, increment=0.05, width=6,
+                                textvariable=self.line_speed_var, format="%.2f")
+        speed_spin.pack(side=tk.LEFT)
+        
+        # Configuração de ganho Kp
+        kp_frame = ttk.Frame(advanced_frame)
+        kp_frame.grid(row=9, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        ttk.Label(kp_frame, text="Kp:").pack(side=tk.LEFT, padx=(0, 5))
+        self.line_kp_var = tk.DoubleVar(value=0.001)
+        kp_spin = ttk.Spinbox(kp_frame, from_=0.0001, to=0.01, increment=0.0001, width=8,
+                             textvariable=self.line_kp_var, format="%.4f")
+        kp_spin.pack(side=tk.LEFT)
+        
+        ttk.Button(advanced_frame, text="⚙️ Aplicar Config", 
+                  command=self.apply_line_config).grid(row=10, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        
+        self.line_following_active = False
+        
+        # Telemetria
+        ttk.Separator(advanced_frame, orient="horizontal").grid(row=11, column=0, sticky=(tk.W, tk.E), pady=5)
         
         # Controle de taxa de atualização
         hz_frame = ttk.Frame(advanced_frame)
-        hz_frame.grid(row=6, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        hz_frame.grid(row=12, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
         ttk.Label(hz_frame, text="Taxa:").pack(side=tk.LEFT, padx=(0, 5))
-        hz_spinbox = ttk.Spinbox(hz_frame, from_=1, to=10, width=5, 
+        hz_spinbox = ttk.Spinbox(hz_frame, from_=1, to=30, width=5, 
                                 textvariable=self.telemetry_hz, state="readonly")
         hz_spinbox.pack(side=tk.LEFT, padx=(0, 5))
         ttk.Label(hz_frame, text="Hz").pack(side=tk.LEFT)
         
         self.telemetry_btn = ttk.Button(advanced_frame, text="📊 Iniciar Telemetria", 
                                       command=self.toggle_telemetry)
-        self.telemetry_btn.grid(row=7, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        self.telemetry_btn.grid(row=13, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
         # Display de telemetria
         self.telemetry_text = scrolledtext.ScrolledText(advanced_frame, width=30, height=8)
-        self.telemetry_text.grid(row=8, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.telemetry_text.grid(row=14, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         advanced_frame.columnconfigure(0, weight=1)
-        advanced_frame.rowconfigure(8, weight=1)
+        advanced_frame.rowconfigure(14, weight=1)
         
     def create_status_frame(self, parent):
         """Cria frame de status e log"""
@@ -820,10 +1015,22 @@ class RobotGUI:
     def on_telemetry_received(self, data):
         """Callback chamado quando telemetria é recebida do ESP32"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        formatted_data = f"[{timestamp}] {data}\n"
         
-        # Parse dos dados para display
+        # Parse dos dados (suporta binário e texto)
         telemetry_dict = TelemetryParser.parse(data)
+        
+        # Log formatado dependendo do tipo de dados
+        if isinstance(data, (bytes, bytearray)):
+            if len(data) >= 2 and data[0] == 0xBE and data[1] == 0xEF:
+                # Formato binário
+                formatted_data = f"[{timestamp}] 📦 Binary telemetry ({len(data)} bytes): {len(telemetry_dict)} fields\n"
+            else:
+                # Bytes mas não reconhecido
+                formatted_data = f"[{timestamp}] {data.hex()}\n"
+        else:
+            # Formato texto
+            formatted_data = f"[{timestamp}] {data}\n"
+        
         if telemetry_dict and hasattr(self, 'telemetry_display'):
             self.telemetry_display.update_data(telemetry_dict)
         
@@ -835,6 +1042,37 @@ class RobotGUI:
         if hasattr(self, 'telemetry_display'):
             self.telemetry_display.clear_data()
             self.log_message("📊 Display de telemetria limpo")
+    
+    def toggle_line_follower(self):
+        """Inicia/para o seguidor de linha"""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Aviso", "Conecte-se ao ESP32 primeiro")
+            return
+            
+        if not self.line_following_active:
+            # Inicia seguidor de linha
+            self.send_command("CMD:FOLLOW_LINE_START")
+            self.line_following_active = True
+            self.line_follow_btn.config(text="⏹️ Parar Seguidor")
+            self.log_message("🛤️ Seguidor de linha iniciado")
+        else:
+            # Para seguidor de linha
+            self.send_command("CMD:FOLLOW_LINE_STOP")
+            self.line_following_active = False
+            self.line_follow_btn.config(text="▶️ Iniciar Seguidor")
+            self.log_message("🛤️ Seguidor de linha parado")
+    
+    def apply_line_config(self):
+        """Aplica configuração do seguidor de linha"""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Aviso", "Conecte-se ao ESP32 primeiro")
+            return
+            
+        speed = self.line_speed_var.get()
+        kp = self.line_kp_var.get()
+        command = f"CMD:FOLLOW_LINE_CFG:{speed:.2f} {kp:.4f}"
+        self.send_command(command)
+        self.log_message(f"⚙️ Config seguidor: velocidade={speed:.2f}, Kp={kp:.4f}")
             
     def update_telemetry(self, data):
         """Atualiza display de telemetria"""

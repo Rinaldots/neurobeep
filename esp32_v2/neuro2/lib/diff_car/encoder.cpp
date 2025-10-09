@@ -30,38 +30,41 @@ void DiffCar::debug_encoder(){
     Serial.println();
  }
 
-void DiffCar::velocity_update(){
+void DiffCar::velocity_update() {
+    // Ler contagem atual dos encoders
+    int64_t left_count_now  = encoder_left.getCount();
+    int64_t right_count_now = encoder_right.getCount();
+
+    // Tempo atual
     unsigned long now_ms = millis();
-    encoder_left_count = encoder_left.getCount();
-    encoder_right_count = encoder_right.getCount();
-    if ((now_ms - last_sample_time_ms) >= SAMPLE_MS) {
-        int64_t left_count_now = encoder_left.getCount();
-        int64_t right_count_now = encoder_right.getCount();
-        unsigned long dt_ms = now_ms - last_sample_time_ms;
-        long delta_left = left_count_now - last_count_left_snapshot;
+    unsigned long dt_ms = now_ms - last_sample_time_ms;
+
+    if (dt_ms >= SAMPLE_MS && dt_ms > 0) {
+        // Variação de pulsos desde a última amostra
+        long delta_left  = left_count_now  - last_count_left_snapshot;
         long delta_right = right_count_now - last_count_right_snapshot;
-        float left_freq_window = 0.0f;
-        float right_freq_window = 0.0f;
-        if (dt_ms > 0) {
-            left_freq_window = (float)delta_left / (dt_ms / 1000.0f);   // pulsos/s
-            right_freq_window = (float)delta_right / (dt_ms / 1000.0f); // pulsos/s
-        }
 
-        left_freq_filtered = EMA_ALPHA * left_freq_window + (1.0f - EMA_ALPHA) * left_freq_filtered;
-        right_freq_filtered = EMA_ALPHA * right_freq_window + (1.0f - EMA_ALPHA) * right_freq_filtered;
+        // Frequência instantânea em pulsos/s
+        float left_freq_instant  = (float)delta_left  / (dt_ms / 1000.0f);
+        float right_freq_instant = (float)delta_right / (dt_ms / 1000.0f);
 
-        last_count_left_snapshot = left_count_now;
+        // Filtro exponencial (EMA) para suavizar a velocidade
+        left_freq_filtered  = EMA_ALPHA * left_freq_instant  + (1.0f - EMA_ALPHA) * left_freq_filtered;
+        right_freq_filtered = EMA_ALPHA * right_freq_instant + (1.0f - EMA_ALPHA) * right_freq_filtered;
+
+        // Atualizar snapshots
+        last_count_left_snapshot  = left_count_now;
         last_count_right_snapshot = right_count_now;
-        last_sample_time_ms = now_ms;
+        last_sample_time_ms       = now_ms;
+
+        // Converter frequência filtrada para velocidade linear (m/s)
+        left_velocity_ms  = (left_freq_filtered  / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
+        right_velocity_ms = (right_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
     }
-    // converter frequência para velocidade linear
-    left_velocity_ms = (left_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
-    right_velocity_ms = (right_freq_filtered / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE_M;
 }
 
 
 #endif
-
 
 
 #ifdef ENCODER_SIMPLE

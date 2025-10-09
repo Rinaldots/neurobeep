@@ -177,6 +177,12 @@ public:
     void update_line_position();
     void debug_line();
     int16_t line_dist_center_mm();  // Versão inteira, mais leve
+    void follow_line(float base_speed = 0.3, float kp = 0.001);  // Seguidor de linha com PID
+
+    // Line following state
+    bool line_following_enabled = false;
+    float line_follow_base_speed = 0.3;
+    float line_follow_kp = 0.001;  // Ganho proporcional
 
     // GPS functions
     void displayInfo();
@@ -199,9 +205,6 @@ public:
         double H[EKF_M*EKF_N]
     );
     void reset_kalman_filter();
-
-    // Bluetooth data transmission
-    String get_telemetry_data();
 
 };
 
