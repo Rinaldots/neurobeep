@@ -280,13 +280,8 @@ void BluetoothCommunication::processCommand(String command) {
         if (DEBUG_BLE) Serial.println("Comando: Definir velocidade esquerda " + String(left_velocity) + ", direita " + String(right_velocity));
         diffCar.left_velocity_target = left_velocity;
         diffCar.right_velocity_target = right_velocity;
-    }
-    else if (command.startsWith("TURN:")) {
-        // Comando para virar: TURN:-0.5 (negativo = esquerda, positivo = direita)
-        float turn_rate = command.substring(5).toFloat();
-        Serial.println("Comando: Virar " + String(turn_rate));
-        diffCar.left_velocity_target = 0.2 - turn_rate;
-        diffCar.right_velocity_target = 0.2 + turn_rate;
+        diffCar.left_gain = 0.0;
+        diffCar.right_gain = 0.0;
     }
     else if (command == "FOLLOW_LINE_START") {
         // Inicia seguidor de linha
@@ -309,6 +304,20 @@ void BluetoothCommunication::processCommand(String command) {
             if (DEBUG_BLE) Serial.printf("Comando: Config seguidor - velocidade: %.2f, kp: %.4f\n", base_speed, kp);
             diffCar.line_follow_base_speed = base_speed;
             diffCar.line_follow_kp = kp;
+        }
+    }
+    else if (command == "SET_KP_KI_KD"){
+        // Configura ganhos do PID: SET_KP_KI_KD:1.0 0.0 0.1 (kp ki kd)
+        // Exemplo: SET_KP_KI_KD:1.0 0.0 0.1
+        int first_space = command.indexOf(' ', 13);
+        int second_space = command.indexOf(' ', first_space + 1);
+        if (first_space > 0 && second_space > first_space) {
+            float kp = command.substring(13, first_space).toFloat();
+            float ki = command.substring(first_space + 1, second_space).toFloat();
+            float kd = command.substring(second_space + 1).toFloat();
+            if (DEBUG_BLE) Serial.printf("Comando: Config PID - kp: %.2f, ki: %.2f, kd: %.2f\n", kp, ki, kd);
+            left_pid.SetTunings(kp, ki, kd);
+            right_pid.SetTunings(kp, ki, kd);
         }
     }
     else if (command == "MARKER_RESET") {

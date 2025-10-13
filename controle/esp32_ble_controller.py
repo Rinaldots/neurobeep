@@ -13,6 +13,7 @@ from datetime import datetime
 from bleak import BleakClient, BleakScanner
 import re
 import struct
+import numpy as np
 
 SERVICE_UUID = "8f3b6fcf-6d12-437f-8b68-9a3494fbe656"
 CHAR_UUID    = "d5593e6b-3328-493a-b3c9-9814683d8e40"
@@ -74,6 +75,8 @@ class TelemetryParser:
             vel_l, vel_r, tgt_l, tgt_r = struct.unpack_from('<ffff', data, offset)
             result['VEL_L'] = vel_l
             result['VEL_R'] = vel_r
+            RobotGUI.left_velocity = vel_l
+            RobotGUI.right_velocity = vel_r
             result['TGT_L'] = tgt_l
             result['TGT_R'] = tgt_r
             offset += 16
@@ -315,6 +318,7 @@ class ESP32BLEController:
         
         # Buffer para telemetria recebida
         self.telemetry_data = ""
+        self.last_parsed_telemetry = {}
         self.telemetry_callback = None
 
         # Event loop dedicado em thread separada
@@ -328,7 +332,7 @@ class ESP32BLEController:
         # Contador e lock para manter ordem entre comandos com mesma prioridade
         self._cmd_counter = 0
         self._cmd_lock = threading.Lock()
-        # Flag para evitar enfileirar múltiplos pedidos de telemetria simultâneos
+        # Flag para evitar enfiletrar múltiplos pedidos de telemetria simultâneos
         self._telemetry_queued = False
 
         # Inicializa estruturas assíncronas dentro do loop dedicado
@@ -378,10 +382,11 @@ class ESP32BLEController:
         try:
             # Agora suporta tanto formato binário quanto texto
             self.telemetry_data = data  # Mantém dados brutos (bytes ou string)
+            self.last_parsed_telemetry = TelemetryParser.parse(data)
             
             # Chama callback se existir (para atualizar GUI)
             if self.telemetry_callback:
-                self.telemetry_callback(data)
+                self.telemetry_callback(self.last_parsed_telemetry)
         except Exception as e:
             print(f"Erro ao processar notificação: {e}")
 
@@ -540,6 +545,12 @@ class ESP32BLEController:
             print(f"Erro ao solicitar telemetria: {e}")
             return ""
     
+    def get_current_speed(self):
+        """Retorna a velocidade média atual do robô a partir da última telemetria."""
+        vel_l = self.last_parsed_telemetry.get('VEL_L', 0)
+        vel_r = self.last_parsed_telemetry.get('VEL_R', 0)
+        return (vel_l + vel_r) / 2.0
+
     def set_telemetry_callback(self, callback):
         """Define callback para quando telemetria for recebida"""
         self.telemetry_callback = callback
@@ -557,8 +568,15 @@ class RobotGUI:
         # Variáveis de controle
         self.velocity_var = tk.DoubleVar(value=0.2)
         self.turn_var = tk.DoubleVar(value=0.0)
-        self.telemetry_hz = tk.IntVar(value=1)  # Taxa de telemetria em Hz
-        
+        self.telemetry_hz = tk.IntVar(value=20)  # Taxa de telemetria em Hz
+        self.pid_kp_var = tk.DoubleVar(value=0.50)
+        self.pid_ki_var = tk.DoubleVar(value=50.0)
+        self.pid_kd_var = tk.DoubleVar(value=25.0)
+
+        # Janela e display de telemetria
+        self.telemetry_window = None
+        self.telemetry_display = None
+
         # Variáveis do auto scan
         self.auto_scanning = False
         self.auto_scan_thread = None
@@ -604,30 +622,127 @@ class RobotGUI:
         control_tab.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         
-        # Aba 2: Telemetria
-        telemetry_tab = ttk.Frame(notebook)
-        notebook.add(telemetry_tab, text="📊 Telemetria")
-        
-        # Toolbar para telemetria
-        toolbar_frame = ttk.Frame(telemetry_tab)
-        toolbar_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        ttk.Button(toolbar_frame, text="️ Limpar", 
-                  command=self.clear_telemetry_display).pack(side=tk.LEFT, padx=5)
-        
-        # Frame para display de telemetria
-        display_frame = ttk.Frame(telemetry_tab)
-        display_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Cria display de telemetria
-        print("📊 Criando display de telemetria...")
-        self.telemetry_display = TelemetryDisplay(display_frame)
-        print("✅ Display de telemetria ativado!")
-        
+        # Aba 2: Configurações
+        settings_tab = ttk.Frame(notebook)
+        notebook.add(settings_tab, text="⚙️ Configurações")
+
+        # Frame principal da aba de configurações
+        settings_frame = ttk.Frame(settings_tab, padding="10")
+        settings_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        settings_tab.columnconfigure(0, weight=1)
+        settings_tab.rowconfigure(0, weight=1)
+
+        # Cria os frames de configuração
+        self.create_settings_frame(settings_frame)
+
         # Configurar grid weights principal
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         
+    def create_settings_frame(self, parent):
+        """Cria a aba de configurações"""
+        # Este frame pode ser dividido em colunas se necessário
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+
+        # Frame de Calibração
+        calibration_frame = ttk.LabelFrame(parent, text="🔬 Calibração", padding="10")
+        calibration_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        calibration_frame.columnconfigure(0, weight=1)
+        
+        ttk.Button(calibration_frame, text="CALIBRATE_LINE_SENSORS", 
+                  command=lambda: self.send_command("CMD:CALIBRATE_LINE_SENSORS")).grid(row=0, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        
+        ttk.Button(calibration_frame, text="CALIBRATE_IMU", 
+                  command=lambda: self.send_command("CMD:CALIBRATE_IMU")).grid(row=1, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+
+        # Frame de Ganhos PID
+        pid_frame = ttk.LabelFrame(parent, text="⚙️ Ganhos PID", padding="10")
+        pid_frame.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        pid_frame.columnconfigure(0, weight=1)
+
+        kp_pid_frame = ttk.Frame(pid_frame)
+        kp_pid_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(kp_pid_frame, text="Kp:", width=4).pack(side=tk.LEFT)
+        kp_pid_spin = ttk.Spinbox(kp_pid_frame, from_=0.0, to=10.0, increment=0.1, width=8,
+                                  textvariable=self.pid_kp_var, format="%.2f")
+        kp_pid_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ki_pid_frame = ttk.Frame(pid_frame)
+        ki_pid_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(ki_pid_frame, text="Ki:", width=4).pack(side=tk.LEFT)
+        ki_pid_spin = ttk.Spinbox(ki_pid_frame, from_=0.0, to=100.0, increment=0.1, width=8,
+                                  textvariable=self.pid_ki_var, format="%.2f")
+        ki_pid_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        kd_pid_frame = ttk.Frame(pid_frame)
+        kd_pid_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(kd_pid_frame, text="Kd:", width=4).pack(side=tk.LEFT)
+        kd_pid_spin = ttk.Spinbox(kd_pid_frame, from_=0.0, to=100.0, increment=0.1, width=8,
+                                  textvariable=self.pid_kd_var, format="%.2f")
+        kd_pid_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ttk.Button(pid_frame, text="⚙️ Aplicar Ganhos PID",
+                  command=self.apply_pid_gains).pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(pid_frame, text="🤖 Auto-Tune PID",
+                    command=self.start_pid_autotune).pack(fill=tk.X, padx=5, pady=2)
+
+        # Frame do Seguidor de Linha
+        line_follower_frame = ttk.LabelFrame(parent, text="🛤️ Seguidor de Linha", padding="10")
+        line_follower_frame.grid(row=0, column=1, rowspan=2, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        line_follower_frame.columnconfigure(0, weight=1)
+
+        speed_frame = ttk.Frame(line_follower_frame)
+        speed_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(speed_frame, text="Vel:", width=4).pack(side=tk.LEFT)
+        self.line_speed_var = tk.DoubleVar(value=0.3)
+        speed_spin = ttk.Spinbox(speed_frame, from_=0.1, to=0.5, increment=0.05, width=6,
+                                textvariable=self.line_speed_var, format="%.2f")
+        speed_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        kp_frame = ttk.Frame(line_follower_frame)
+        kp_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(kp_frame, text="Kp:", width=4).pack(side=tk.LEFT)
+        self.line_kp_var = tk.DoubleVar(value=0.001)
+        kp_spin = ttk.Spinbox(kp_frame, from_=0.0001, to=0.01, increment=0.0001, width=8,
+                             textvariable=self.line_kp_var, format="%.4f")
+        kp_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        ttk.Button(line_follower_frame, text="⚙️ Aplicar Config. Seguidor", 
+                  command=self.apply_line_config).pack(fill=tk.X, padx=5, pady=5)
+
+        # Frame de Marcadores
+        marker_frame = ttk.LabelFrame(parent, text="🎯 Marcadores", padding="10")
+        marker_frame.grid(row=2, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        marker_frame.columnconfigure(0, weight=1)
+
+        ttk.Button(marker_frame, text="🔄 Reset Marcadores", 
+                  command=self.reset_markers).pack(fill=tk.X, padx=5, pady=2)
+        
+        spacing_frame = ttk.Frame(marker_frame)
+        spacing_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(spacing_frame, text="Espaço (m):").pack(side=tk.LEFT)
+        self.marker_spacing_var = tk.DoubleVar(value=0.5)
+        spacing_spin = ttk.Spinbox(spacing_frame, from_=0.1, to=5.0, increment=0.1, width=6,
+                                  textvariable=self.marker_spacing_var, format="%.1f")
+        spacing_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        ttk.Button(marker_frame, text="⚙️ Aplicar Espaçamento", 
+                  command=self.apply_marker_spacing).pack(fill=tk.X, padx=5, pady=5)
+
+        # Frame de Telemetria
+        telemetry_cfg_frame = ttk.LabelFrame(parent, text="📊 Config. Telemetria", padding="10")
+        telemetry_cfg_frame.grid(row=2, column=1, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        telemetry_cfg_frame.columnconfigure(0, weight=1)
+
+        hz_frame = ttk.Frame(telemetry_cfg_frame)
+        hz_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(hz_frame, text="Taxa (Hz):").pack(side=tk.LEFT)
+        hz_spinbox = ttk.Spinbox(hz_frame, from_=1, to=30, width=5, 
+                                textvariable=self.telemetry_hz, state="readonly")
+        hz_spinbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
     def create_connection_frame(self, parent):
         """Cria frame de conexão BLE"""
         connection_frame = ttk.LabelFrame(parent, text=f"Conexão ESP32 BLE", padding="5")
@@ -709,93 +824,34 @@ class RobotGUI:
         ttk.Button(advanced_frame, text="START", 
                   command=lambda: self.send_command("CMD:START")).grid(row=0, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
-        ttk.Button(advanced_frame, text="CALIBRATE_LINE_SENSORS", 
-                  command=lambda: self.send_command("CMD:CALIBRATE_LINE_SENSORS")).grid(row=1, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        
-        ttk.Button(advanced_frame, text="CALIBRATE_IMU", 
-                  command=lambda: self.send_command("CMD:CALIBRATE_IMU")).grid(row=2, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        
-        # Comandos de teste
-        ttk.Separator(advanced_frame, orient="horizontal").grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
-        
-        ttk.Button(advanced_frame, text="🧪 Teste Conexão", 
-                  command=lambda: self.send_command("CMD:TEST")).grid(row=4, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        
-        # Seguidor de linha
-        ttk.Separator(advanced_frame, orient="horizontal").grid(row=5, column=0, sticky=(tk.W, tk.E), pady=5)
-        
-        ttk.Label(advanced_frame, text="🛤️ Seguidor de Linha", font=('TkDefaultFont', 9, 'bold')).grid(row=6, column=0, pady=(5,2))
-        
         self.line_follow_btn = ttk.Button(advanced_frame, text="▶️ Iniciar Seguidor", 
                   command=self.toggle_line_follower)
-        self.line_follow_btn.grid(row=7, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        self.line_follow_btn.grid(row=1, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+
+        # Comandos de teste
+        ttk.Separator(advanced_frame, orient="horizontal").grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
         
-        # Configuração de velocidade base
-        speed_frame = ttk.Frame(advanced_frame)
-        speed_frame.grid(row=8, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        ttk.Label(speed_frame, text="Vel:").pack(side=tk.LEFT, padx=(0, 5))
-        self.line_speed_var = tk.DoubleVar(value=0.3)
-        speed_spin = ttk.Spinbox(speed_frame, from_=0.1, to=0.5, increment=0.05, width=6,
-                                textvariable=self.line_speed_var, format="%.2f")
-        speed_spin.pack(side=tk.LEFT)
-        
-        # Configuração de ganho Kp
-        kp_frame = ttk.Frame(advanced_frame)
-        kp_frame.grid(row=9, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        ttk.Label(kp_frame, text="Kp:").pack(side=tk.LEFT, padx=(0, 5))
-        self.line_kp_var = tk.DoubleVar(value=0.001)
-        kp_spin = ttk.Spinbox(kp_frame, from_=0.0001, to=0.01, increment=0.0001, width=8,
-                             textvariable=self.line_kp_var, format="%.4f")
-        kp_spin.pack(side=tk.LEFT)
-        
-        ttk.Button(advanced_frame, text="⚙️ Aplicar Config", 
-                  command=self.apply_line_config).grid(row=10, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        ttk.Button(advanced_frame, text="🧪 Teste Conexão", 
+                  command=lambda: self.send_command("CMD:TEST")).grid(row=3, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
         self.line_following_active = False
         
-        # Marcadores de linha
-        ttk.Separator(advanced_frame, orient="horizontal").grid(row=11, column=0, sticky=(tk.W, tk.E), pady=5)
-        
-        ttk.Label(advanced_frame, text="🎯 Marcadores", font=('TkDefaultFont', 9, 'bold')).grid(row=12, column=0, pady=(5,2))
-        
-        ttk.Button(advanced_frame, text="🔄 Reset Marcadores", 
-                  command=self.reset_markers).grid(row=13, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        
-        # Configuração de espaçamento
-        spacing_frame = ttk.Frame(advanced_frame)
-        spacing_frame.grid(row=14, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        ttk.Label(spacing_frame, text="Espaço (m):").pack(side=tk.LEFT, padx=(0, 5))
-        self.marker_spacing_var = tk.DoubleVar(value=0.5)
-        spacing_spin = ttk.Spinbox(spacing_frame, from_=0.1, to=5.0, increment=0.1, width=6,
-                                  textvariable=self.marker_spacing_var, format="%.1f")
-        spacing_spin.pack(side=tk.LEFT)
-        
-        ttk.Button(advanced_frame, text="⚙️ Aplicar Espaçamento", 
-                  command=self.apply_marker_spacing).grid(row=15, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        
         # Telemetria
-        ttk.Separator(advanced_frame, orient="horizontal").grid(row=16, column=0, sticky=(tk.W, tk.E), pady=5)
-        
-        # Controle de taxa de atualização
-        hz_frame = ttk.Frame(advanced_frame)
-        hz_frame.grid(row=17, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
-        
-        ttk.Label(hz_frame, text="Taxa:").pack(side=tk.LEFT, padx=(0, 5))
-        hz_spinbox = ttk.Spinbox(hz_frame, from_=1, to=30, width=5, 
-                                textvariable=self.telemetry_hz, state="readonly")
-        hz_spinbox.pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(hz_frame, text="Hz").pack(side=tk.LEFT)
+        ttk.Separator(advanced_frame, orient="horizontal").grid(row=4, column=0, sticky=(tk.W, tk.E), pady=5)
         
         self.telemetry_btn = ttk.Button(advanced_frame, text="📊 Iniciar Telemetria", 
                                       command=self.toggle_telemetry)
-        self.telemetry_btn.grid(row=18, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+        self.telemetry_btn.grid(row=5, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
         
+        ttk.Button(advanced_frame, text="📈 Abrir Janela de Telemetria",
+                   command=self.open_telemetry_window).grid(row=6, column=0, padx=5, pady=2, sticky=(tk.W, tk.E))
+
         # Display de telemetria
         self.telemetry_text = scrolledtext.ScrolledText(advanced_frame, width=30, height=8)
-        self.telemetry_text.grid(row=19, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.telemetry_text.grid(row=7, column=0, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         advanced_frame.columnconfigure(0, weight=1)
-        advanced_frame.rowconfigure(19, weight=1)
+        advanced_frame.rowconfigure(7, weight=1)
         
     def create_status_frame(self, parent):
         """Cria frame de status e log"""
@@ -1039,36 +1095,67 @@ class RobotGUI:
             interval = 1.0 / hz  # Converte Hz para intervalo em segundos
             time.sleep(interval)
     
-    def on_telemetry_received(self, data):
+    def on_telemetry_received(self, telemetry_dict):
         """Callback chamado quando telemetria é recebida do ESP32"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         
-        # Parse dos dados (suporta binário e texto)
-        telemetry_dict = TelemetryParser.parse(data)
-        
         # Log formatado dependendo do tipo de dados
-        if isinstance(data, (bytes, bytearray)):
-            if len(data) >= 2 and data[0] == 0xBE and data[1] == 0xEF:
-                # Formato binário
-                formatted_data = f"[{timestamp}] 📦 Binary telemetry ({len(data)} bytes): {len(telemetry_dict)} fields\n"
-            else:
-                # Bytes mas não reconhecido
-                formatted_data = f"[{timestamp}] {data.hex()}\n"
+        if telemetry_dict:
+            # Formato binário
+            formatted_data = f"[{timestamp}] 📦 Binary telemetry: {len(telemetry_dict)} fields\n"
         else:
-            # Formato texto
-            formatted_data = f"[{timestamp}] {data}\n"
+            # Formato texto ou desconhecido
+            formatted_data = f"[{timestamp}] {telemetry_dict}\n"
         
-        if telemetry_dict and hasattr(self, 'telemetry_display'):
+        if telemetry_dict and self.telemetry_display:
             self.telemetry_display.update_data(telemetry_dict)
         
         # Atualiza GUI de forma thread-safe
         self.root.after(0, lambda: self.update_telemetry(formatted_data))
     
+    def open_telemetry_window(self):
+        """Abre uma nova janela para o display de telemetria."""
+        if self.telemetry_window and self.telemetry_window.winfo_exists():
+            self.telemetry_window.lift()
+            return
+
+        self.telemetry_window = tk.Toplevel(self.root)
+        self.telemetry_window.title("📊 Display de Telemetria")
+        self.telemetry_window.geometry("800x600")
+        self.telemetry_window.configure(bg='#2b2b2b')
+
+        # Toolbar
+        toolbar_frame = ttk.Frame(self.telemetry_window)
+        toolbar_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(toolbar_frame, text="🧹 Limpar", 
+                  command=self.clear_telemetry_display).pack(side=tk.LEFT, padx=5)
+
+        # Frame para o display
+        display_frame = ttk.Frame(self.telemetry_window)
+        display_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Cria o display
+        self.telemetry_display = TelemetryDisplay(display_frame)
+        self.log_message("📈 Janela de telemetria aberta.")
+
+        # Limpa a referência quando a janela é fechada
+        self.telemetry_window.protocol("WM_DELETE_WINDOW", self._on_telemetry_window_close)
+
+    def _on_telemetry_window_close(self):
+        """Callback para quando a janela de telemetria é fechada."""
+        self.log_message("📈 Janela de telemetria fechada.")
+        self.telemetry_display = None
+        if self.telemetry_window:
+            self.telemetry_window.destroy()
+            self.telemetry_window = None
+
     def clear_telemetry_display(self):
         """Limpa o display de telemetria"""
-        if hasattr(self, 'telemetry_display'):
+        if self.telemetry_display:
             self.telemetry_display.clear_data()
             self.log_message("📊 Display de telemetria limpo")
+        else:
+            self.log_message("⚠️ Janela de telemetria não está aberta.")
     
     def toggle_line_follower(self):
         """Inicia/para o seguidor de linha"""
@@ -1101,6 +1188,125 @@ class RobotGUI:
         self.send_command(command)
         self.log_message(f"⚙️ Config seguidor: velocidade={speed:.2f}, Kp={kp:.4f}")
     
+    def apply_pid_gains(self):
+        """Aplica ganhos PID"""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Aviso", "Conecte-se ao ESP32 primeiro")
+            return
+            
+        kp = self.pid_kp_var.get()
+        ki = self.pid_ki_var.get()
+        kd = self.pid_kd_var.get()
+        command = f"CMD:SET_KP_KI_KD:{kp:.2f} {ki:.2f} {kd:.2f}"
+        self.send_command(command)
+        self.log_message(f"⚙️ Ganhos PID aplicados: Kp={kp:.2f}, Ki={ki:.2f}, Kd={kd:.2f}")
+
+    def start_pid_autotune(self):
+        """Inicia o processo de auto-tune do PID em uma thread separada."""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Aviso", "Conecte-se ao ESP32 primeiro")
+            return
+
+        if not messagebox.askyesno(
+            "Auto-Tune PID",
+            "Isso iniciará o processo de auto-tune do PID. "
+            "O robô pode se mover inesperadamente. Deseja continuar?"
+        ):
+            return
+
+        # Inicia o processo em uma nova thread para não bloquear a GUI
+        threading.Thread(target=self._pid_autotune_thread, daemon=True).start()
+
+
+    def _pid_autotune_thread(self):
+        """Lógica do auto-tune que roda em segundo plano."""
+        self.log_message("🤖 Iniciando Auto-Tune do PID por Curva de Reação...")
+
+        # --- Parâmetros do autotune ---
+        test_speed = 0.15      # Velocidade do teste (saída de passo)
+        duration = 30         # Aumentado para garantir que a curva 'S' se estabilize.
+        interval = 1/20        # Intervalo de leitura do sensor em segundos
+
+        response = []         # Salva os valores da velocidade medida
+        t_values = []
+
+        try:
+            # Seta PID inicial baixo para evitar comportamento agressivo
+            kp, ki, kd = 0.5, 50.0, 25.0
+            self.send_command(f"CMD:SET_KP_KI_KD:{kp:.2f} {ki:.2f} {kd:.2f}")
+
+            # Define velocidade constante (Passo de Teste)
+            self.log_message(f"🚗 Definindo velocidade constante para autotune: {test_speed} m/s")
+            self.send_command(f"CMD:VEL:{test_speed} {test_speed}")
+
+            start_time = time.time()
+            while time.time() - start_time < duration:
+                current_speed = self.controller.get_current_speed()
+                print(f"Velocidade atual: {current_speed:.2f} m/s")  # Debug
+                response.append(current_speed)
+                t_values.append(time.time() - start_time)
+                time.sleep(interval)
+
+            self.send_command("CMD:VEL:0 0")
+            self.log_message("⏹️ Teste de velocidade finalizado.")
+
+            response = np.array(response)
+            t_values = np.array(t_values)
+
+            steady_state_value = np.mean(response[int(len(response) * 0.8):])
+            
+            if steady_state_value == 0:
+                self.log_message("⚠️ Auto-Tune falhou: Velocidade de estado estacionário zero.")
+                return
+
+            derivatives = np.diff(response) / np.diff(t_values)
+            R = np.max(derivatives)
+
+            if R <= 0:
+                self.log_message("⚠️ Auto-Tune falhou: Não foi detectada subida de velocidade (R <= 0).")
+                return
+
+            max_slope_index = np.argmax(derivatives)
+            
+            # Ponto na curva S onde a inclinação é máxima
+            point_max_slope = response[max_slope_index]
+            time_max_slope = t_values[max_slope_index]
+            
+            L = time_max_slope - (point_max_slope / R)
+            Kp_process = steady_state_value / test_speed
+
+            kp = (1.2 / Kp_process) * (1 / L)
+            ki = 2 * kp / (L * 1) # Tau_i = 2 * L
+            kd = 0.5 * kp * L      # Tau_d = 0.5 * L
+            ku_simplificado = 1.0 / (R * L) # Aproximação de um ganho crítico
+
+            kp = 0.6 * ku_simplificado
+            ki = 2 * kp / (4 * L) # Ki = Kp / Tau_i, onde Tau_i = 4L
+            kd = kp * L / 1.1     # Kd = Kp * Tau_d, onde Tau_d = L/2 (usando ~1.1 para estabilidade)
+            ku_processo = R * L / Kp_process # O que o seu código faz: amplitude/velocidade
+
+            Kp_final = 0.6 / (R * L)
+            Ti_final = 4 * L
+            Td_final = L / 2
+            
+            kp = Kp_final
+            ki = kp / Ti_final
+            kd = kp * Td_final
+            
+            self.send_command(f"CMD:SET_KP_KI_KD:{kp:.2f} {ki:.2f} {kd:.2f}")
+            self.log_message(f"✅ Auto-Tune finalizado (Curva S): KP={kp:.2f}, KI={ki:.2f}, KD={kd:.2f}")
+            self.log_message(f"Parâmetros da Curva: Tempo Morto (L)={L:.2f}s, Inclinação (R)={R:.2f}")
+
+            # Atualiza os valores na GUI
+            self.root.after(0, lambda: self.pid_kp_var.set(round(kp, 2)))
+            self.root.after(0, lambda: self.pid_ki_var.set(round(ki, 2)))
+            self.root.after(0, lambda: self.pid_kd_var.set(round(kd, 2)))
+            
+        except ImportError:
+            self.log_message("❌ Erro: a biblioteca 'numpy' é necessária para o auto-tune. Instale com 'pip install numpy'")
+        except Exception as e:
+            self.log_message(f"❌ Erro durante o cálculo do PID: {e}")
+
     def reset_markers(self):
         """Reseta contador de marcadores"""
         if not self.controller.is_connected:

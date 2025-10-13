@@ -52,9 +52,6 @@ const float EMA_ALPHA = 0.1f;           // 0..1, maior = resposta mais rápida
 #define KI 50.0
 #define KD 25.0
 
-
-
-
 #define MIN_PULSES_PER_S 0.5   
 #define NO_PULSE_TIMEOUT_MS 100
 #define MOTOR_EN_A  42
@@ -68,5 +65,8 @@ const float EMA_ALPHA = 0.1f;           // 0..1, maior = resposta mais rápida
 #define WHEEL_CIRCUMFERENCE_M 0.065f * 3.14159f
 
 #define NOBS 5
-#define ENCODER_QUAD TRUE
+
+
+// Define qual tipo de encoder está sendo usado
+#define ENCODER_QUAD
 //#define ENCODER_SIMPLE TRUE

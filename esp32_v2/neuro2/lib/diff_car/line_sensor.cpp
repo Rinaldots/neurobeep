@@ -86,7 +86,7 @@ void DiffCar::follow_line(float base_speed, float kp) {
     
     // Garante que velocidades estejam dentro dos limites
     const float MAX_SPEED = 0.5;
-    const float MIN_SPEED = -0.1;  // Permite pequena reversão para curvas acentuadas
+    const float MIN_SPEED = -0.3;  // Permite pequena reversão para curvas acentuadas
     
     if (left_speed > MAX_SPEED) left_speed = MAX_SPEED;
     if (left_speed < MIN_SPEED) left_speed = MIN_SPEED;

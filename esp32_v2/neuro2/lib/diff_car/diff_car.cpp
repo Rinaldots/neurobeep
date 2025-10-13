@@ -43,8 +43,6 @@ void DiffCar::init_kf(ekf_t *ekf) {
 
 // --- Atualização EKF simplificada ---
 void DiffCar::update_kalman_filter() {
-
-
     // --- Leituras dos sensores ---
     float v_odom = this->odometry.vel_raw.linear.x;  // m/s
     float v_y_odom = this->odometry.vel_raw.linear.y;  // m/s
