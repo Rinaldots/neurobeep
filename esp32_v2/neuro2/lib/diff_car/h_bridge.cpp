@@ -18,11 +18,11 @@ void DiffCar::setup_h_bridge(){
     ledcSetup(1, 30000, 8);
     ledcAttachPin(MOTOR_EN_B, 1);
     left_pid.SetOutputLimits(-255, 255);
-    left_pid.SetSampleTimeUs(100000);
+    left_pid.SetSampleTimeUs(10000);
     left_pid.SetTunings(KP, KI, KD, left_pid.pMode::pOnError, left_pid.dMode::dOnMeas, left_pid.iAwMode::iAwClamp);
     left_pid.SetMode(left_pid.Control::automatic);
     right_pid.SetOutputLimits(-255, 255);
-    right_pid.SetSampleTimeUs(100000);
+    right_pid.SetSampleTimeUs(10000);
     right_pid.SetTunings(KP, KI, KD, right_pid.pMode::pOnError, right_pid.dMode::dOnMeas, right_pid.iAwMode::iAwClamp);
     right_pid.SetMode(right_pid.Control::automatic);
 }

@@ -191,7 +191,7 @@ public:
     void follow_line(float base_speed = 0.3, float kp = 0.001);  // Seguidor de linha com PID
     void detect_line_markers();  // Detecta linhas perpendiculares (marcadores de controle)
     void reset_line_markers();   // Reseta contador de marcadores
-
+    void calibrate_lines();
     // Line following state
     bool line_following_enabled = false;
     float line_follow_base_speed = 0.3;

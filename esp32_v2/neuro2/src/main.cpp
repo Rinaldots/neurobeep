@@ -27,9 +27,11 @@ void setup() {
 	Serial.println("Starting...");
 	ekf_t ekf = {0};
 	bluetooth.begin();
+	
 	diffCar.calibrated = false; 
 	diffCar.setup();
-	
+	//diffCar.calibrate_lines();
+	//delay(1500);
 	// Cria task BLE em Core 0 (Core 1 fica para o loop principal)
 	// Prioridade 1, stack 4096 bytes
 	xTaskCreatePinnedToCore(
@@ -47,8 +49,22 @@ void setup() {
 
 void loop() {
 	static unsigned long last_t = 0;
+	static unsigned long last_t2 = 0;
 	unsigned long now = micros();
 
+	if(now - last_t >= (unsigned long)(1000000 / 100)) { // 100 Hz
+		last_t2 = now;
+		// 1) velocity update
+		diffCar.velocity_update();
+		#if ENABLE_TIMING
+			d_velocity = micros() - t_prev; t_prev = micros();
+		#endif
+		// 8) motor handler
+		diffCar.handler_motor();
+		#if ENABLE_TIMING
+			d_motor = micros() - t_prev; t_prev = micros();
+		#endif
+	}
 	if (now - last_t >= (unsigned long)(1000000 / 40)) { // 40 Hz
 		last_t = now;
 		unsigned long t0 = micros();
@@ -58,11 +74,7 @@ void loop() {
 			unsigned long d_velocity = 0, d_mpu = 0, d_line = 0, d_rawvel = 0;
 			unsigned long d_kalman = 0, d_odom = 0, d_reset = 0, d_motor = 0, d_rfid = 0, d_bt = 0;
 		#endif
-		// 1) velocity update
-		diffCar.velocity_update();
-		#if ENABLE_TIMING
-			d_velocity = micros() - t_prev; t_prev = micros();
-		#endif
+		
 		// 2) mpu
 		diffCar.update_mpu();
 		#if ENABLE_TIMING
@@ -73,7 +85,7 @@ void loop() {
 		#if ENABLE_TIMING
 			d_line = micros() - t_prev; t_prev = micros();
 		#endif
-		
+		/*
 		// 4) raw velocity -> odometry helper
 		diffCar.odometry.update_raw_velocity(diffCar.left_velocity_ms, diffCar.right_velocity_ms, 0.16);
 		#if ENABLE_TIMING
@@ -94,11 +106,8 @@ void loop() {
 		#if ENABLE_TIMING
 			d_reset = micros() - t_prev; t_prev = micros();
 		#endif
-		// 8) motor handler
-		diffCar.handler_motor();
-		#if ENABLE_TIMING
-			d_motor = micros() - t_prev; t_prev = micros();
-		#endif
+		*/
+		
 		
 		// 8.5) Line follower (se ativado)
 		if (diffCar.line_following_enabled) {
@@ -123,6 +132,7 @@ void loop() {
 		// optional debug helpers (commented out)
 		//diffCar.debug_mpu();
 		//diffCar.debug_encoder();
+		//delay(100);
 		//diffCar.odometry.debug();
 		//diffCar.debug_line();
 

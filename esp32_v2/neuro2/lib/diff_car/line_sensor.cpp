@@ -7,7 +7,7 @@
 void DiffCar::setup_line_sensor(){
     // configure the sensors
     qtr.setTypeRC();
-    qtr.setSensorPins((const uint8_t[]){(uint8_t)SEN_REF_D1, (uint8_t)SEN_REF_D2, (uint8_t)SEN_REF_D3, (uint8_t)SEN_REF_D4, (uint8_t)SEN_REF_D5, (uint8_t)SEN_REF_D6, (uint8_t)SEN_REF_D7, (uint8_t)SEN_REF_D8}, 8);
+    qtr.setSensorPins((const uint8_t[]){(uint8_t)SEN_REF_D3, (uint8_t)SEN_REF_D4, (uint8_t)SEN_REF_D5, (uint8_t)SEN_REF_D6, (uint8_t)SEN_REF_D7, (uint8_t)SEN_REF_D8}, 6);
     delay(100);
     // Try to load existing calibration from NVS
     if (this->load_qtr_calibration()) {
@@ -22,12 +22,22 @@ void DiffCar::setup_line_sensor(){
 
 int16_t DiffCar::line_dist_center_mm() {
     float line_position = (float)this->line_position_value / 1000.0f;
-    return (int16_t)(line_position* 100.0f - 350.0f);  // Converter para mm e centralizar em zero
+    return (int16_t)(line_position* 100.0f - 250.0f);  // Converter para mm e centralizar em zero
+}
+void DiffCar::calibrate_lines() {
+    Serial.print("Calibrating...");
+    for (uint16_t i = 0; i < 1000; i++)
+    {
+        qtr.calibrate();
+    }
+    Serial.println(" Done!");
+    this->calibrated = true;
+    this->save_qtr_calibration();   
 }
 
 void DiffCar::calibrate_line_sensors() {
     Serial.print("Calibrating...");
-    for (uint16_t i = 0; i < 400; i++)
+    for (uint16_t i = 0; i < 800; i++)
     {
         qtr.calibrate();
         
@@ -74,7 +84,7 @@ void DiffCar::follow_line(float base_speed, float kp) {
     float correction = kp * error;
     
     // Limita a correção para evitar mudanças bruscas
-    const float MAX_CORRECTION = 0.3;
+    const float MAX_CORRECTION = 0.5;
     if (correction > MAX_CORRECTION) correction = MAX_CORRECTION;
     if (correction < -MAX_CORRECTION) correction = -MAX_CORRECTION;
     
@@ -86,7 +96,7 @@ void DiffCar::follow_line(float base_speed, float kp) {
     
     // Garante que velocidades estejam dentro dos limites
     const float MAX_SPEED = 0.5;
-    const float MIN_SPEED = -0.3;  // Permite pequena reversão para curvas acentuadas
+    const float MIN_SPEED = -0.5;  // Permite pequena reversão para curvas acentuadas
     
     if (left_speed > MAX_SPEED) left_speed = MAX_SPEED;
     if (left_speed < MIN_SPEED) left_speed = MIN_SPEED;

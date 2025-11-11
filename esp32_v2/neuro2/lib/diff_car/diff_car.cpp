@@ -104,7 +104,7 @@ void DiffCar::reset_kalman_filter() {
 
 void DiffCar::setup() {
   setup_mpu();
-  calibrate_imu();
+  //calibrate_imu();
   setup_h_bridge();
   setup_rfid();
   setup_line_sensor();

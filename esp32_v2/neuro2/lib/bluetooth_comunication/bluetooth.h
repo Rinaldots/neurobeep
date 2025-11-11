@@ -9,7 +9,7 @@
 
 #define SERVICE_UUID        "8f3b6fcf-6d12-437f-8b68-9a3494fbe656"
 #define CHARACTERISTIC_UUID "d5593e6b-3328-493a-b3c9-9814683d8e40"
-
+#define WRITE_UUID "c1d5f8e4-3b2a-4f4e-9f2e-1a2b3c4d5e6f"
 // Compile-time debug for BLE; set to 1 to enable verbose Serial prints
 #ifndef DEBUG_BLE
 #define DEBUG_BLE 0
@@ -98,6 +98,7 @@ void BluetoothCommunication::begin() {
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(false);
+    
     pAdvertising->setMinPreferred(0x0);
     BLEDevice::startAdvertising();
     

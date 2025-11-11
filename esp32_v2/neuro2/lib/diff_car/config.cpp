@@ -32,9 +32,9 @@
 // Configurações do encoder
 const int pulses_per_rev = 16*4;    // pulsos por volta do encoder (ajuste)
 const float wheel_diameter_m = 0.065; // opcional para converter em m/s
-const unsigned long DEBOUNCE_US = 3000; // rejeita pulsos < 3 ms (ajuste)
+const unsigned long DEBOUNCE_US = 1000; // rejeita pulsos < 1 ms (ajuste)
 const unsigned long SAMPLE_MS = 100;    // janela principal de cálculo (100 ms)
-const int MEDIAN_WINDOW = 5;            // janela mediana (odd)
+const int MEDIAN_WINDOW = 5;            // jan'ela mediana (odd)
 const float EMA_ALPHA = 0.1f;           // 0..1, maior = resposta mais rápida
 #define ENCODER_A_1 14
 #define ENCODER_A_2 13
@@ -48,9 +48,9 @@ const float EMA_ALPHA = 0.1f;           // 0..1, maior = resposta mais rápida
 #define C2 1.61248061e-02
 #define C3 -1.85446691e+00
 // Variavei PID
-#define KP 0.5
-#define KI 50.0
-#define KD 25.0
+#define KP 2.5
+#define KI 5.0
+#define KD 5.0
 
 #define MIN_PULSES_PER_S 0.5   
 #define NO_PULSE_TIMEOUT_MS 100
