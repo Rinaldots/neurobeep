@@ -790,13 +790,13 @@ class RobotGUI:
                   command=lambda: self.send_command("CMD:VEL:0.3 0.3")).grid(row=0, column=1, padx=5, pady=5)
         
         ttk.Button(movement_frame, text="←\nESQUERDA", 
-                  command=lambda: self.send_command("CMD:VEL:-0.2 0.2")).grid(row=1, column=0, padx=5, pady=5)
+                  command=lambda: self.send_command("CMD:VEL:0.3 -0.3")).grid(row=1, column=0, padx=5, pady=5)
         
         ttk.Button(movement_frame, text="⏹\nPARAR", 
                   command=lambda: self.send_command("CMD:VEL:0.0 0.0")).grid(row=1, column=1, padx=5, pady=5)
         
         ttk.Button(movement_frame, text="→\nDIREITA", 
-                  command=lambda: self.send_command("CMD:VEL:0.2 -0.2")).grid(row=1, column=2, padx=5, pady=5)
+                  command=lambda: self.send_command("CMD:VEL:-0.3 0.3")).grid(row=1, column=2, padx=5, pady=5)
 
         ttk.Button(movement_frame, text="↓\nTRÁS", 
                   command=lambda: self.send_command("CMD:VEL:-0.3 -0.3")).grid(row=2, column=1, padx=5, pady=5)
