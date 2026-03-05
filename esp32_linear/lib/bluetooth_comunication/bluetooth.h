@@ -78,23 +78,16 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 class MyCallbacks : public BLECharacteristicCallbacks
 {
-    void onConnect(BLEServer* pServer) {
-        deviceConnected = true;
-        if(DEBUG_BLE) Serial.println(">> DISPOSITIVO CONECTADO <<");
-    };
-    
-    // Função para monitorar inclui latência/intervalo
-    void onMtuChange(uint16_t MTU, uint16_t conn_id) {
-        if(DEBUG_BLE) Serial.printf("MTU alterado para: %d\n", MTU);
-    }
-
     void onWrite(BLECharacteristic *pCharacteristic)
     {
+        // Read value into auto (std::string) then convert
         auto tmp = pCharacteristic->getValue();
         String rxValue = String(tmp.c_str());
         if (rxValue.length() > 0)
         {
             receivedData = rxValue;
+            //if (DEBUG_BLE)
+                //Serial.println("BLE onWrite received: " + rxValue);
         }
     }
 };
@@ -105,6 +98,8 @@ private:
     BLEServer *pServer;
     BLECharacteristic *pCharacteristic;
     BLEService *pService;
+    // Cached telemetry: use compact binary format instead of text to reduce payload
+    // Binary telemetry packet (header + data)
     uint8_t telemetry_cache_binary[120];
     size_t telemetry_cache_binary_len;
 
@@ -181,21 +176,131 @@ void BluetoothCommunication::sendData(const char *data)
 
 void BluetoothCommunication::updateTelemetryCache()
 {
+    // 1. Header
+    // O ESP32 é Little Endian. Para enviar [0xBE, 0xEF], escrevemos 0xEFBE.
+    telemetry_data.header = 0xEFBE; 
+
+    // 2. Encoders
+    telemetry_data.encoder_left_count = (int32_t)linearCar.steps;
+    telemetry_data.encoder_right_count = (int32_t)0;
+
+    // 3. Velocities
+    telemetry_data.left_velocity_ms = 0;
+    telemetry_data.right_velocity_ms = 0;
+    telemetry_data.left_velocity_target = 0;
+    telemetry_data.right_velocity_target = 0;
+
+    // 4. PWM & Gains
+    telemetry_data.left_motor_pwm = 0;
+    telemetry_data.right_motor_pwm = 0;
+    telemetry_data.left_gain = 0;
+    telemetry_data.right_gain = 0;
+
+    // 5. Odometry Position
+    telemetry_data.odom_x = 0;
+    telemetry_data.odom_y = 0;
     
+    // Cálculo do Theta (Quaternion para Euler Yaw)
+    double q_z = 0;
+    double q_w = 0;
+    telemetry_data.odom_theta = 0;
+
+    // 6. Odometry Velocity
+    telemetry_data.odom_vx = 0;
+    telemetry_data.odom_vy = 0;
+    telemetry_data.odom_omega = 0;
+    // 7. IMU
+    telemetry_data.accel_x = 0;
+    telemetry_data.accel_y = 0;
+    telemetry_data.accel_z = 0;
+
+    // 8. Line Sensors
+    telemetry_data.line_distance_mm = 0;
+    telemetry_data.line_marker_count = 0;
+    telemetry_data.line_marker_distance_m = 0;
+
+    // 9. GPS
+    telemetry_data.gps_latitude = 0;
+    telemetry_data.gps_longitude = 0;
+    telemetry_data.gps_altitude = 0;
+    telemetry_data.gps_speed = 0;
+    telemetry_data.gps_valid = 0;
+
+    // 10. RFID (String handling segura)
+    // Limpa o array com zeros primeiro (padding)
+    memset(telemetry_data.rfid_uid, 0, sizeof(telemetry_data.rfid_uid));
+    // Copia a string (respeitando o limite de 12 bytes)
+    // Se diffCar.rfid_uid for String do Arduino:
+    // Se for std::string:
+    // strncpy(telemetry_data.rfid_uid, diffCar.rfid_uid.c_str(), sizeof(telemetry_data.rfid_uid));
+    telemetry_cache_binary_len = 0;
 }
 
 void BluetoothCommunication::handler()
 {
     connect_status();
     
+    // Timing probes
+    #if DEBUG_BLE
+    unsigned long t0 = micros();
+    #endif
+
     String bleData = receiveData();
+
+    #if DEBUG_BLE
+    unsigned long t_after_receive = micros();
+    #endif
 
     // Se recebeu algum dado...
     if (bleData.length() > 0)
     {
+        bool sendTelemetryResponse = true; // Flag para controlar se envia resposta no final
+
+        // CASO 1: Comandos Gerais ("CMD:...")
+        if (bleData.startsWith("CMD:"))
+        {
+            String command = bleData.substring(4);
+            if (DEBUG_BLE) Serial.println("Comando recebido: " + command);
+            processCommand(command);
+        }
+        // CASO 2: Velocidade ("VEL:...")
+        else if (bleData.startsWith("VEL:"))
+        {
+            processCommand(bleData);
+        }
+        // CASO 3: Requisição Explícita ("RQS")
+        else if (bleData.startsWith("RQS"))
+        {
+            
+        }
+        // CASO 4: Genérico
+        else 
+        {
+            if (DEBUG_BLE) Serial.println("Comando direto: " + bleData);
+            processCommand(bleData);
+        }
+
+        // --- BLOCO UNIFICADO DE RESPOSTA ---
+        // Envia a telemetria atualizada para o App sempre que processar um comando
         
-    } 
-} 
+        if (sendTelemetryResponse && connected && telemetry_cache_binary_len > 0)
+        {
+            #if DEBUG_BLE
+            unsigned long t_notify_start = micros();
+            #endif
+
+            pCharacteristic->setValue((uint8_t*)&telemetry_data, sizeof(TelemetryData));
+            pCharacteristic->notify();
+
+            #if DEBUG_BLE
+            unsigned long t_notify_end = micros();
+            Serial.printf("[ble_timing] receive->process: %lu us | notify: %lu us\n",
+                          (unsigned long)(t_after_receive - t0), 
+                          (unsigned long)(t_notify_end - t_notify_start));
+            #endif
+        }
+    } // Fecha if (bleData.length() > 0)
+} // Fecha void handler()
 
 String BluetoothCommunication::receiveData()
 {
@@ -213,7 +318,58 @@ void BluetoothCommunication::processCommand(String command)
     {
         if (DEBUG_BLE)
             Serial.println("Comando: Iniciar movimento");
-        // Inicia o carrinho W.I.P
+        
+    }
+    else if (command == "RESET_KALMAN")
+    {
+        
+    }
+    else if (command == "CALIBRATE_IMU")
+    {
+        
+    }
+    else if (command == "CALIBRATE_LINE_SENSORS")
+    {
+        
+    }
+    else if (command.startsWith("VEL:"))
+    {
+        
+    }
+    else if (command == "FOLLOW_LINE_START")
+    {
+        linearCar.comando = PLAY;
+    }
+    else if (command == "FOLLOW_LINE_STOP")
+    {
+        linearCar.comando = STOP;
+    }
+    else if (command.startsWith("FOLLOW_LINE_CFG:"))
+    {
+        
+    }
+    else if (command == "SET_KP_KI_KD")
+    {
+        
+    }
+    else if (command == "MARKER_RESET")
+    {
+        
+    }
+    else if (command.startsWith("MARKER_SPACING:"))
+    {
+        
+    }
+    else if (command.startsWith("MARKER_THRESHOLD:"))
+    {
+        
+    }
+    else
+    {
+        if (DEBUG_BLE)
+            Serial.println("Comando desconhecido: " + command);
+        // keep error sent so client knows command failed
+        sendData("ERROR: Comando não reconhecido");
     }
 }
 

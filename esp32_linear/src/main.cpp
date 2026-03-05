@@ -38,18 +38,19 @@ void setup() {
 		&bleTaskHandle,    // Handle da task
 		0                  // Core 0 (Core 1 para loop principal)
 	);
-	linearCar.set_motor_speed(200);
+	
 
 	Serial.println("Setup complete. BLE task running on Core 0");
+	linearCar.setTargetStep(1000);
+	linearCar.estado = HOMING;
+	linearCar.comando = PLAY;
 }
 
 void loop() {
 	//static unsigned long last_t = 0;
-
-	//unsigned long now = micros();
-
-	linearCar.update_h_bridge();
-
+	//Serial.println(".");
+	linearCar.step_loop();
 	
+	//unsigned long now = micros();
 }
 
