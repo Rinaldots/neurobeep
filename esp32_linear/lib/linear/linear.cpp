@@ -34,29 +34,34 @@ void LinearCar::setup()
 
 void LinearCar::step_loop()
 {
-  Serial.print("Passos: ");
-  Serial.println(steps);
+  //Serial.print("Passos: ");
+  //Serial.println(steps);
   bool endstopTriggered = digitalRead(ENDSTOP);
   
-
+  
+  Serial.print("Comando: ");
+  Serial.print(comando);
+  Serial.print(" | Estado: ");
+  Serial.print(estado);
+  Serial.print(" | Steps: ");
+  Serial.println(steps);
+  // Logica do HOMING
   if(estado == HOMING){
     if(endstopTriggered){
     estado = PARADO;
     stepper.startMove(-1);
     steps = 0;
+    Serial.println("Homing completo. Passos resetados para 0.");
+    return;
   }else{
     stepper.startMove(1);
-  }
-  }
-  bool logica = comando == PLAY && estado != HOMING;
-  Serial.print(logica);
+    stepper.nextAction();
+    return;
+  }}
+
+  // Logica do PLAY
+
   if(comando == PLAY && estado != HOMING){
-
-    Serial.print("Comando: ");
-	  Serial.print(comando);
-	  Serial.print(" Estado: ");
-	  Serial.println(estado);
-
     if(steps >= -50){
       estado = INDO;
     }
@@ -64,15 +69,23 @@ void LinearCar::step_loop()
     {      
       estado = VOLTANDO;    
     }
-
-    if (estado == INDO)
-    {      stepper.startMove(-1);
-           steps = steps -1;   }
-    else if(estado == VOLTANDO)
-    {      stepper.startMove(1);
-           steps = steps +1;
-    }
+  } 
+  // Logica do CONTROLE APP
+  if(comando == BYPASS && estado != HOMING){
+    estado = controle;
   }
+
+  // Logica de movimento
+  if (estado == INDO){      
+          stepper.startMove(-1);
+          steps = steps -1;}
+  else if(estado == VOLTANDO){      
+          stepper.startMove(1);
+          steps = steps +1;
+  }else if(estado == PARADO){
+          stepper.startMove(0);
+  }
+  
   stepper.nextAction();
 }
 

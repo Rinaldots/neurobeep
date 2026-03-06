@@ -181,7 +181,7 @@ void BluetoothCommunication::updateTelemetryCache()
     telemetry_data.header = 0xEFBE; 
 
     // 2. Encoders
-    telemetry_data.encoder_left_count = (int32_t)linearCar.steps;
+    telemetry_data.encoder_left_count = (int32_t)0;
     telemetry_data.encoder_right_count = (int32_t)0;
 
     // 3. Velocities
@@ -197,7 +197,7 @@ void BluetoothCommunication::updateTelemetryCache()
     telemetry_data.right_gain = 0;
 
     // 5. Odometry Position
-    telemetry_data.odom_x = 0;
+    telemetry_data.odom_x = linearCar.steps;
     telemetry_data.odom_y = 0;
     
     // Cálculo do Theta (Quaternion para Euler Yaw)
@@ -227,13 +227,10 @@ void BluetoothCommunication::updateTelemetryCache()
     telemetry_data.gps_valid = 0;
 
     // 10. RFID (String handling segura)
-    // Limpa o array com zeros primeiro (padding)
+
     memset(telemetry_data.rfid_uid, 0, sizeof(telemetry_data.rfid_uid));
-    // Copia a string (respeitando o limite de 12 bytes)
-    // Se diffCar.rfid_uid for String do Arduino:
-    // Se for std::string:
-    // strncpy(telemetry_data.rfid_uid, diffCar.rfid_uid.c_str(), sizeof(telemetry_data.rfid_uid));
-    telemetry_cache_binary_len = 0;
+   
+    telemetry_cache_binary_len = sizeof(TelemetryData);
 }
 
 void BluetoothCommunication::handler()
@@ -260,7 +257,7 @@ void BluetoothCommunication::handler()
         if (bleData.startsWith("CMD:"))
         {
             String command = bleData.substring(4);
-            if (DEBUG_BLE) Serial.println("Comando recebido: " + command);
+            //if (DEBUG_BLE) Serial.println("Comando recebido: " + command);
             processCommand(command);
         }
         // CASO 2: Velocidade ("VEL:...")
@@ -271,7 +268,14 @@ void BluetoothCommunication::handler()
         // CASO 3: Requisição Explícita ("RQS")
         else if (bleData.startsWith("RQS"))
         {
-            
+            updateTelemetryCache();
+            if (connected && telemetry_cache_binary_len > 0)
+            {
+                pCharacteristic->setValue((uint8_t*)&telemetry_data, sizeof(TelemetryData));
+                pCharacteristic->notify();
+                Serial.println("Resposta raw: " + String(telemetry_cache_binary_len) + " bytes enviada");
+            }
+            sendTelemetryResponse = false; // Telemetry already sent
         }
         // CASO 4: Genérico
         else 
@@ -279,28 +283,15 @@ void BluetoothCommunication::handler()
             if (DEBUG_BLE) Serial.println("Comando direto: " + bleData);
             processCommand(bleData);
         }
-
-        // --- BLOCO UNIFICADO DE RESPOSTA ---
-        // Envia a telemetria atualizada para o App sempre que processar um comando
+        updateTelemetryCache(); 
         
+        pCharacteristic->notify();
         if (sendTelemetryResponse && connected && telemetry_cache_binary_len > 0)
         {
-            #if DEBUG_BLE
-            unsigned long t_notify_start = micros();
-            #endif
-
             pCharacteristic->setValue((uint8_t*)&telemetry_data, sizeof(TelemetryData));
-            pCharacteristic->notify();
-
-            #if DEBUG_BLE
-            unsigned long t_notify_end = micros();
-            Serial.printf("[ble_timing] receive->process: %lu us | notify: %lu us\n",
-                          (unsigned long)(t_after_receive - t0), 
-                          (unsigned long)(t_notify_end - t_notify_start));
-            #endif
         }
-    } // Fecha if (bleData.length() > 0)
-} // Fecha void handler()
+    } 
+} 
 
 String BluetoothCommunication::receiveData()
 {
@@ -313,16 +304,16 @@ void BluetoothCommunication::processCommand(String command)
 {
     command.trim();        // Remove espaços
     command.toUpperCase(); // Converte para maiúscula
-
+    Serial.println("Processando comando: " + command);
     if (command == "START")
     {
         if (DEBUG_BLE)
             Serial.println("Comando: Iniciar movimento");
         
     }
-    else if (command == "RESET_KALMAN")
+    else if (command == "REDEFINIR")
     {
-        
+        linearCar.estado = HOMING;   
     }
     else if (command == "CALIBRATE_IMU")
     {
@@ -334,11 +325,25 @@ void BluetoothCommunication::processCommand(String command)
     }
     else if (command.startsWith("VEL:"))
     {
-        
+        float velocity = command.substring(4, command.indexOf(' ', 4)).toFloat();
+        //Serial.println("Comando de velocidade: " + String(velocity));
+        if (velocity > 0){
+            linearCar.comando = BYPASS;
+            linearCar.controle = INDO;
+        }else if (velocity < 0){
+            linearCar.comando = BYPASS;
+            linearCar.controle = VOLTANDO;
+        }else{
+            linearCar.comando = BYPASS;
+            linearCar.controle = PARADO;  
+        }
+        //Serial.println("Controle atualizado: " + String(linearCar.controle));
+        return;
     }
     else if (command == "FOLLOW_LINE_START")
     {
         linearCar.comando = PLAY;
+        linearCar.estado = INDO;
     }
     else if (command == "FOLLOW_LINE_STOP")
     {

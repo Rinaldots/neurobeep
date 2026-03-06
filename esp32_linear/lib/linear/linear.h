@@ -11,7 +11,8 @@ enum Estado {
     };
 enum Comando {
         PLAY,
-        STOP
+        STOP,
+        BYPASS
 };
 
 class LinearCar {
@@ -21,8 +22,9 @@ public:
     void step_loop();
     void setTargetStep(long steps);
     Comando comando = STOP;
+    
     Estado estado = PARADO;
-    Estado ultimoEstado = PARADO;
+    Estado controle = PARADO;
     long steps = 0;
 
 private:

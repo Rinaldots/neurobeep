@@ -17,6 +17,7 @@ void bleTask(void* parameter) {
 		// Atualiza cache de telemetria no contexto da task BLE
 		bluetooth.updateTelemetryCache();
 		bluetooth.handler();
+		
 		vTaskDelay(xDelay);
 	}
 }
@@ -41,9 +42,9 @@ void setup() {
 	
 
 	Serial.println("Setup complete. BLE task running on Core 0");
-	linearCar.setTargetStep(1000);
+	
 	linearCar.estado = HOMING;
-	linearCar.comando = PLAY;
+	linearCar.comando = STOP;
 }
 
 void loop() {
